@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Vexa: Main process",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+      "windows": { "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd" },
+      "args": [".", "--remote-debugging-port=9223"],
+      "outputCapture": "std",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Vexa: Attach to UI + pages",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9223,
+      "webRoot": "${workspaceFolder}/src",
+      "timeout": 20000
+    },
+    {
+      "name": "Vexa: Main (fresh test profile)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+      "windows": { "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd" },
+      "args": ["."],
+      "env": { "VEXA_PROFILE": "${workspaceFolder}/.profile-dev" },
+      "outputCapture": "std"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Vexa: Debug everything",
+      "configurations": ["Vexa: Main process", "Vexa: Attach to UI + pages"],
+      "stopAll": true
+    }
+  ]
+}

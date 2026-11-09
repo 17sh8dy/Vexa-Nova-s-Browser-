@@ -1,0 +1,7 @@
+{
+  "files.exclude": { "**/.profile-dev": true },
+  "search.exclude": { "**/node_modules": true, "dist": true, "test/e2e/artifacts": true },
+  "editor.tabSize": 2,
+  "files.eol": "\n",
+  "liveServer.settings.ignoreFiles": ["**"]
+}

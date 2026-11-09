@@ -1,0 +1,9 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Vexa: start", "type": "npm", "script": "start", "problemMatcher": [] },
+    { "label": "Vexa: unit tests", "type": "npm", "script": "test", "group": "test", "problemMatcher": [] },
+    { "label": "Vexa: end-to-end tests", "type": "npm", "script": "test:e2e", "group": "test", "problemMatcher": [] },
+    { "label": "Vexa: build Windows installer", "type": "npm", "script": "dist:win", "group": "build", "problemMatcher": [] }
+  ]
+}
