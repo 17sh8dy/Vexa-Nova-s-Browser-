@@ -1,0 +1,24 @@
+/* Lists used by history, bookmarks and downloads */
+.toolbar-row { display: flex; align-items: center; gap: 10px; min-height: 40px; margin-bottom: 10px; }
+.toolbar-row .spacer { flex: 1; }
+.selbar { display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--accent-text); font-weight: 600; animation: fade 150ms; }
+@keyframes fade { from { opacity: 0; } }
+.group { margin-bottom: 20px; }
+.group-title { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); margin: 0 0 8px 6px; }
+.item {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 46px; padding: 6px 8px 6px 12px;
+  border-radius: 11px;
+}
+.item:hover { background: var(--surface); }
+.item.selected { background: var(--accent-soft); }
+.item .time { width: 66px; flex: none; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.item .title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; overflow: hidden; }
+.item .title a, .item .title .t { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.item .title a:hover { color: var(--accent-text); }
+.item .title .host { color: var(--text-faint); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 40%; }
+.item .acts { display: flex; gap: 2px; opacity: 0; transition: opacity 120ms; }
+.item:hover .acts, .item:focus-within .acts { opacity: 1; }
+.item input[type="checkbox"] { flex: none; opacity: 0.35; transition: opacity 120ms; }
+.item:hover input[type="checkbox"], .item.selected input[type="checkbox"] { opacity: 1; }
+.more { text-align: center; padding: 16px; }

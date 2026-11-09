@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Bookmarks</title>
+  <link rel="stylesheet" href="vexa://shared/theme.css" />
+  <link rel="stylesheet" href="vexa://shared/page.css" />
+  <link rel="stylesheet" href="vexa://shared/list.css" />
+  <link rel="stylesheet" href="bookmarks.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="side" id="side"></aside>
+    <main class="main">
+      <div class="page-head">
+        <h1>Bookmarks</h1>
+        <label class="search"><span id="search-ico"></span><input id="q" type="text" placeholder="Search bookmarks" spellcheck="false" /></label>
+      </div>
+      <div class="bm-layout">
+        <div class="tree card" id="tree"></div>
+        <div>
+          <div class="toolbar-row">
+            <div class="crumb" id="crumb"></div>
+            <div class="spacer"></div>
+            <button class="btn small" id="add-bm">Add bookmark</button>
+            <button class="btn small" id="add-folder">New folder</button>
+            <button class="ibtn" id="more" title="Import / export"></button>
+          </div>
+          <div class="card" id="items"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="more-menu" class="mini-menu" hidden>
+    <button data-m="import">Import bookmarks (HTML)…</button>
+    <button data-m="export">Export bookmarks (HTML)…</button>
+  </div>
+
+  <dialog id="edit">
+    <form method="dialog" id="edit-form">
+      <h3 id="edit-title">Edit bookmark</h3>
+      <label for="f-title">Name</label>
+      <input type="text" id="f-title" required />
+      <div id="f-url-wrap"><label for="f-url">URL</label><input type="text" id="f-url" /></div>
+      <label for="f-folder">Folder</label>
+      <select id="f-folder"></select>
+      <div class="actions"><button type="button" class="btn" id="edit-cancel">Cancel</button><button type="submit" class="btn primary" id="edit-save">Save</button></div>
+    </form>
+  </dialog>
+
+  <script src="vexa://shared/icons.js"></script>
+  <script src="vexa://shared/page.js"></script>
+  <script src="bookmarks.js"></script>
+</body>
+</html>

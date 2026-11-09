@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Settings</title>
+  <link rel="stylesheet" href="vexa://shared/theme.css" />
+  <link rel="stylesheet" href="vexa://shared/page.css" />
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="side" id="side"></aside>
+    <main class="main">
+      <div class="page-head"><h1>Settings</h1></div>
+      <nav class="jump" id="jump">
+        <a href="#general">General</a><a href="#appearance">Appearance</a><a href="#search">Search</a><a href="#privacy">Privacy</a><a href="#permissions">Site permissions</a><a href="#downloads">Downloads</a><a href="#about">About</a>
+      </nav>
+
+      <section class="section" id="general">
+        <h2>General</h2>
+        <div class="card">
+          <div class="row">
+            <div class="label"><b>On startup</b><small>What Vexa opens when it launches</small></div>
+            <select data-setting="startup">
+              <option value="restore">Continue where you left off</option>
+              <option value="newtab">Open the New Tab page</option>
+              <option value="home">Open the home page</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="label"><b>Home page</b><small>Where the home button and Alt+Home take you</small></div>
+            <div class="seg" id="home-mode"><button data-v="newtab">New Tab</button><button data-v="custom">Custom URL</button></div>
+          </div>
+          <div class="row" id="home-url-row">
+            <div class="label"><b>Custom home page</b></div>
+            <input type="url" id="home-url" placeholder="https://example.com" style="width: 320px" />
+          </div>
+          <div class="row">
+            <div class="label"><b>Show home button</b></div>
+            <label class="switch"><input type="checkbox" data-setting="showHomeButton" /><span></span></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="appearance">
+        <h2>Appearance</h2>
+        <div class="card">
+          <div class="row">
+            <div class="label"><b>Theme</b><small>Applies to Vexa and to websites that support light/dark mode</small></div>
+            <div class="seg" id="theme"><button data-v="system">System</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+          </div>
+          <div class="row">
+            <div class="label"><b>Show bookmarks bar</b><small>Ctrl+Shift+B</small></div>
+            <label class="switch"><input type="checkbox" data-setting="showBookmarksBar" /><span></span></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="search">
+        <h2>Search</h2>
+        <div class="card">
+          <div class="row">
+            <div class="label"><b>Search engine</b><small>Used in the address bar and on the New Tab page</small></div>
+            <select data-setting="searchEngine" id="engine"></select>
+          </div>
+          <div class="row">
+            <div class="label"><b>Address bar suggestions</b><small>Suggest pages from your history and bookmarks. Nothing you type is sent anywhere until you press Enter.</small></div>
+            <label class="switch"><input type="checkbox" data-setting="suggestions" /><span></span></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="privacy">
+        <h2>Privacy &amp; security</h2>
+        <div class="card">
+          <div class="row">
+            <div class="label"><b>Block third-party cookies</b><small>Stops cookies being sent to or set by other sites embedded in the page you're on. Some embedded sign-ins may stop working.</small></div>
+            <label class="switch"><input type="checkbox" data-setting="blockThirdPartyCookies" /><span></span></label>
+          </div>
+          <div class="row">
+            <div class="label"><b>Send “Do Not Track” and Global Privacy Control</b><small>Asks sites not to track or sell your data. Sites decide whether to honour it.</small></div>
+            <label class="switch"><input type="checkbox" data-setting="doNotTrack" /><span></span></label>
+          </div>
+        </div>
+
+        <h2 class="sub-h">Clear browsing data</h2>
+        <div class="card clear-card">
+          <div class="checks">
+            <label><input type="checkbox" id="c-history" checked /> <span><b>Browsing history</b><small>Pages you've visited and New Tab shortcuts</small></span></label>
+            <label><input type="checkbox" id="c-cookies" checked /> <span><b>Cookies and site data</b><small>Signs you out of most sites</small></span></label>
+            <label><input type="checkbox" id="c-cache" checked /> <span><b>Cached images and files</b><small>Some sites may load more slowly next visit</small></span></label>
+            <label><input type="checkbox" id="c-downloads" /> <span><b>Download list</b><small>Files on disk are kept</small></span></label>
+            <label><input type="checkbox" id="c-permissions" /> <span><b>Site permissions</b><small>Camera, location and other decisions you've made</small></span></label>
+          </div>
+          <div class="clear-actions"><span class="hint">Clears data from all time.</span><button class="btn primary" id="clear-now">Clear data</button></div>
+        </div>
+
+        <h2 class="sub-h">When Vexa closes</h2>
+        <div class="card">
+          <div class="row"><div class="label"><b>Clear history</b><small>Also forgets open tabs, so the next start is fresh</small></div><label class="switch"><input type="checkbox" data-exit="history" /><span></span></label></div>
+          <div class="row"><div class="label"><b>Clear cookies and site data</b></div><label class="switch"><input type="checkbox" data-exit="cookies" /><span></span></label></div>
+          <div class="row"><div class="label"><b>Clear cache</b></div><label class="switch"><input type="checkbox" data-exit="cache" /><span></span></label></div>
+          <div class="row"><div class="label"><b>Clear download list</b></div><label class="switch"><input type="checkbox" data-exit="downloads" /><span></span></label></div>
+        </div>
+      </section>
+
+      <section class="section" id="permissions">
+        <h2>Site permissions</h2>
+        <p class="hint">What sites may do when they ask. “Ask” shows a prompt under the toolbar.</p>
+        <div class="card" id="perm-defaults"></div>
+        <h2 class="sub-h">Per-site decisions</h2>
+        <div class="card" id="perm-sites"></div>
+      </section>
+
+      <section class="section" id="downloads">
+        <h2>Downloads</h2>
+        <div class="card">
+          <div class="row">
+            <div class="label"><b>Location</b><small id="dl-dir"></small></div>
+            <button class="btn small" id="dl-change">Change…</button>
+          </div>
+          <div class="row">
+            <div class="label"><b>Ask where to save each file</b></div>
+            <label class="switch"><input type="checkbox" data-setting="askDownloadLocation" /><span></span></label>
+          </div>
+          <div class="row">
+            <div class="label"><b>Show downloads when they start</b></div>
+            <label class="switch"><input type="checkbox" data-setting="showDownloadsOnStart" /><span></span></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="about">
+        <h2>About Vexa</h2>
+        <div class="card about">
+          <img src="vexa://shared/logo.svg" alt="" />
+          <div>
+            <div class="about-name">Vexa <span id="ver"></span></div>
+            <div class="about-sub">The Nova browser</div>
+            <div class="about-meta" id="meta"></div>
+            <button class="btn small" id="open-data">Open profile folder</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="vexa://shared/icons.js"></script>
+  <script src="vexa://shared/page.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

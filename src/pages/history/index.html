@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>History</title>
+  <link rel="stylesheet" href="vexa://shared/theme.css" />
+  <link rel="stylesheet" href="vexa://shared/page.css" />
+  <link rel="stylesheet" href="vexa://shared/list.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="side" id="side"></aside>
+    <main class="main">
+      <div class="page-head">
+        <h1>History</h1>
+        <label class="search"><span id="search-ico"></span><input id="q" type="text" placeholder="Search history" spellcheck="false" /></label>
+      </div>
+      <div class="toolbar-row">
+        <div id="selbar" class="selbar" hidden><span id="selcount"></span><button class="btn small" id="sel-cancel">Cancel</button><button class="btn small danger" id="sel-delete">Delete</button></div>
+        <div class="spacer"></div>
+        <a class="btn small" href="vexa://settings/#privacy">Clear browsing data…</a>
+      </div>
+      <div id="list"></div>
+      <div id="more" class="more" hidden><button class="btn small" id="more-btn">Show more</button></div>
+    </main>
+  </div>
+  <script src="vexa://shared/icons.js"></script>
+  <script src="vexa://shared/page.js"></script>
+  <script src="history.js"></script>
+</body>
+</html>
