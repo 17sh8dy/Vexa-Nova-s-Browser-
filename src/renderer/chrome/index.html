@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https: http: file: vexa:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>Vexa</title>
+  <link rel="stylesheet" href="../shared/theme.css" />
+  <link rel="stylesheet" href="chrome.css" />
+</head>
+<body>
+  <div id="chrome">
+    <header id="tabstrip">
+      <div class="caption-spacer-left"></div>
+      <div id="tabs" role="tablist" aria-label="Tabs"></div>
+      <button id="new-tab" class="strip-btn" title="New tab (Ctrl+T)" aria-label="New tab"></button>
+      <div class="drag-fill"></div>
+      <div id="private-chip" class="private-chip" hidden></div>
+      <div class="caption-spacer-right"></div>
+    </header>
+
+    <nav id="toolbar">
+      <div class="nav-group">
+        <button id="back" class="tb-btn" title="Back (Alt+Left)" aria-label="Back"></button>
+        <button id="forward" class="tb-btn" title="Forward (Alt+Right)" aria-label="Forward"></button>
+        <button id="reload" class="tb-btn" title="Reload (Ctrl+R)" aria-label="Reload"></button>
+        <button id="home" class="tb-btn" title="Home (Alt+Home)" aria-label="Home"></button>
+      </div>
+
+      <div id="omnibox" class="omnibox">
+        <button id="site-chip" class="site-chip" tabindex="-1"></button>
+        <div class="omni-field">
+          <input id="address" type="text" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-label="Address and search bar" />
+          <div id="url-display" class="url-display" aria-hidden="true"></div>
+        </div>
+        <button id="zoom-badge" class="omni-btn zoom-badge" title="Reset zoom (Ctrl+0)" hidden></button>
+        <button id="star" class="omni-btn" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark this page"></button>
+      </div>
+
+      <div class="nav-group right">
+        <button id="downloads-btn" class="tb-btn" title="Downloads (Ctrl+J)" aria-label="Downloads" hidden>
+          <svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15.5" /><circle class="ring-fill" cx="18" cy="18" r="15.5" /></svg>
+          <span class="dl-icon"></span>
+        </button>
+        <button id="menu-btn" class="tb-btn menu-btn" title="Menu" aria-label="Menu"></button>
+      </div>
+      <div id="progress" class="progress" aria-hidden="true"><div class="progress-bar"></div></div>
+    </nav>
+
+    <div id="bookmarks-bar" class="bookmarks-bar" hidden></div>
+
+    <div id="permission-bar" class="infobar" hidden>
+      <span class="infobar-icon"></span>
+      <span class="infobar-text"></span>
+      <label class="infobar-remember"><input type="checkbox" checked /> Remember</label>
+      <button class="ib-btn" data-decision="block">Block</button>
+      <button class="ib-btn primary" data-decision="allow">Allow</button>
+    </div>
+
+    <div id="findbar" class="findbar" hidden>
+      <div class="find-box">
+        <span class="find-icon"></span>
+        <input id="find-input" type="text" placeholder="Find on page" spellcheck="false" />
+        <span id="find-count" class="find-count"></span>
+        <button id="find-prev" class="fb-btn" title="Previous (Shift+Enter)"></button>
+        <button id="find-next" class="fb-btn" title="Next (Enter)"></button>
+        <button id="find-close" class="fb-btn" title="Close (Esc)"></button>
+      </div>
+    </div>
+  </div>
+
+  <main id="panel" class="panel" hidden>
+    <div class="panel-inner">
+      <div class="panel-mark"></div>
+      <h1 id="panel-title"></h1>
+      <p id="panel-desc"></p>
+      <code id="panel-code"></code>
+      <div class="panel-actions">
+        <button id="panel-retry" class="btn primary">Try again</button>
+        <button id="panel-back" class="btn">Go back</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="../shared/icons.js"></script>
+  <script src="chrome.js"></script>
+</body>
+</html>

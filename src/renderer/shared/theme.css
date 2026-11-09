@@ -1,0 +1,87 @@
+/* Vexa design tokens — shared by the browser UI and popup layer. */
+:root {
+  color-scheme: light dark;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Ubuntu, Cantarell, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  --strip: #ece9f5;
+  --toolbar: #faf9fd;
+  --surface: #efecf6;
+  --surface-hover: #e6e1f2;
+  --surface-active: #ddd6ef;
+  --raised: #ffffff;
+  --border: rgba(40, 24, 90, 0.10);
+  --border-strong: rgba(40, 24, 90, 0.18);
+  --text: #1c1730;
+  --text-dim: #675f82;
+  --text-faint: #9a93b2;
+  --accent: #7c3aed;
+  --accent-2: #a855f7;
+  --accent-text: #6d28d9;
+  --accent-soft: rgba(124, 58, 237, 0.13);
+  --accent-ring: rgba(124, 58, 237, 0.35);
+  --danger: #dc2626;
+  --warn: #b45309;
+  --ok: #059669;
+  --shadow-pop: 0 18px 50px -12px rgba(30, 14, 70, 0.30), 0 4px 14px -4px rgba(30, 14, 70, 0.14);
+  --shadow-tab: 0 1px 2px rgba(30, 14, 70, 0.10), 0 2px 8px -2px rgba(30, 14, 70, 0.10);
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --strip: #0e0c15;
+    --toolbar: #17141f;
+    --surface: #211d2c;
+    --surface-hover: #2a2539;
+    --surface-active: #332d45;
+    --raised: #1d1928;
+    --border: rgba(255, 255, 255, 0.07);
+    --border-strong: rgba(255, 255, 255, 0.13);
+    --text: #ece8f6;
+    --text-dim: #a49cbd;
+    --text-faint: #6f6887;
+    --accent: #8b5cf6;
+    --accent-2: #c084fc;
+    --accent-text: #c4b5fd;
+    --accent-soft: rgba(139, 92, 246, 0.18);
+    --accent-ring: rgba(167, 139, 250, 0.45);
+    --danger: #f87171;
+    --warn: #fbbf24;
+    --ok: #34d399;
+    --shadow-pop: 0 24px 60px -12px rgba(0, 0, 0, 0.65), 0 6px 18px -6px rgba(0, 0, 0, 0.5);
+    --shadow-tab: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px -4px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Private windows are always dark, with a deeper indigo cast. */
+:root.private {
+  color-scheme: dark;
+  --strip: #0a0814;
+  --toolbar: #14102a;
+  --surface: #1e1938;
+  --surface-hover: #282146;
+  --surface-active: #322a55;
+  --raised: #1a1532;
+  --border: rgba(196, 181, 253, 0.09);
+  --border-strong: rgba(196, 181, 253, 0.16);
+  --text: #ece8ff;
+  --text-dim: #a59dc9;
+  --text-faint: #6f6898;
+  --accent: #a78bfa;
+  --accent-2: #e879f9;
+  --accent-text: #ddd6fe;
+  --accent-soft: rgba(167, 139, 250, 0.2);
+  --accent-ring: rgba(196, 181, 253, 0.5);
+  --danger: #f87171;
+  --warn: #fbbf24;
+  --ok: #34d399;
+  --shadow-pop: 0 24px 60px -12px rgba(0, 0, 0, 0.7), 0 6px 18px -6px rgba(0, 0, 0, 0.5);
+  --shadow-tab: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; font-family: var(--font); font-size: 13px; color: var(--text); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+kbd { font-family: var(--font); }
+[hidden] { display: none !important; }

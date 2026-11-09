@@ -1,0 +1,62 @@
+{
+  "name": "vexa",
+  "productName": "Vexa",
+  "version": "0.1.0",
+  "description": "Vexa — the Nova web browser. A fast, private, Chromium-based desktop browser.",
+  "main": "src/main/main.js",
+  "author": "Nova",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --vexa-dev",
+    "test": "node --test test/unit",
+    "test:e2e": "node test/e2e/run.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis portable"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/17sh8dy/vexa-nova-s-browser-.git"
+  },
+  "devDependencies": {
+    "electron": "45.2.3"
+  },
+  "build": {
+    "appId": "com.nova.vexa",
+    "productName": "Vexa",
+    "copyright": "Copyright © 2026 Nova",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Vexa",
+      "artifactName": "Vexa-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Vexa-Portable-${version}.${ext}"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": ["AppImage"],
+      "category": "Network"
+    }
+  }
+}

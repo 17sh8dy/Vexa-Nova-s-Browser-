@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>New Tab</title>
+  <link rel="stylesheet" href="vexa://shared/theme.css" />
+  <link rel="stylesheet" href="vexa://shared/page.css" />
+  <link rel="stylesheet" href="newtab.css" />
+</head>
+<body>
+  <div class="sky" aria-hidden="true"></div>
+  <main class="ntp">
+    <div class="hero">
+      <img class="logo" src="vexa://shared/logo.svg" alt="" />
+      <div class="wordmark">vexa</div>
+      <div id="greeting" class="greeting"></div>
+    </div>
+    <form id="search-form" class="ntp-search" autocomplete="off">
+      <span id="search-icon" class="ntp-search-icon"></span>
+      <input id="q" type="text" spellcheck="false" aria-label="Search or enter address" />
+      <kbd class="ntp-kbd">Enter</kbd>
+    </form>
+    <section id="tiles" class="tiles" aria-label="Most visited"></section>
+    <div id="tiles-empty" class="tiles-empty" hidden>Sites you visit often will appear here.</div>
+    <div id="restore" class="restore" hidden><button class="linkish" id="restore-btn">Restore hidden sites</button></div>
+  </main>
+  <footer class="ntp-foot">
+    <a href="vexa://bookmarks/">Bookmarks</a><span>·</span>
+    <a href="vexa://history/">History</a><span>·</span>
+    <a href="vexa://downloads/">Downloads</a><span>·</span>
+    <a href="vexa://settings/">Settings</a>
+  </footer>
+  <script src="vexa://shared/icons.js"></script>
+  <script src="vexa://shared/page.js"></script>
+  <script src="newtab.js"></script>
+</body>
+</html>
