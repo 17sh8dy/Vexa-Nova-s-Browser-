@@ -73,6 +73,7 @@ body.fullscreen .caption-spacer-left { width: 0; }
   opacity: 0.95;
 }
 .tab.dragging { z-index: 5; box-shadow: var(--shadow-pop); transition: none; }
+.tab.tearing { opacity: 0.85; cursor: grabbing; }
 .tab.narrow { padding: 0; justify-content: center; }
 .tab.narrow .tab-title, .tab.narrow .tab-close { display: none; }
 .tab.narrow.active .tab-close { display: flex; position: absolute; right: 2px; }

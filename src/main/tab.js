@@ -5,6 +5,8 @@ const { history } = require('./history');
 const { bookmarks } = require('./bookmarks');
 const { isInternal, NEWTAB_URL } = require('./url');
 const { actionFor } = require('./shortcuts');
+const { settings } = require('./settings');
+const { passwords } = require('./passwords');
 
 const TAB_PRELOAD = path.join(__dirname, '..', 'preload', 'internal.js');
 const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
@@ -51,6 +53,7 @@ class Tab {
     this.audible = false;
     this.zoom = 1;
     this.permissionRequests = []; // pending prompts
+    this.passwordPrompt = null; // { id, origin, username, password, update, navs }
     this.find = { active: false, text: '', matches: 0, ordinal: 0 };
     this.htmlFullscreen = false;
     this.pending = lazy ? { url, restore } : null;
@@ -130,6 +133,8 @@ class Tab {
     });
 
     wc.on('did-navigate', (_e, url) => {
+      // A "save password?" offer survives the post-login redirect, but not wandering around.
+      if (this.passwordPrompt && ++this.passwordPrompt.navs > 2) this.passwordPrompt = null;
       this.url = url;
       // Restored and back/forward-cached entries already carry a title, and Chromium
       // won't fire page-title-updated for them — so take it from the entry.
@@ -338,6 +343,29 @@ class Tab {
     this.changed();
   }
 
+  // --- password manager ---
+  /** A page submitted a login: offer to save it (never in private windows, never if the user opted out). */
+  offerPassword(origin, username, password) {
+    if (this.isPrivate || !settings.get('offerToSavePasswords') || !passwords.available() || passwords.isNever(origin)) return;
+    const kind = passwords.classify(origin, username, password);
+    if (kind === 'same') return;
+    this.passwordPrompt = { id: `pw-${this.id}-${Date.now()}`, origin, username, password, update: kind === 'update', navs: 0 };
+    this.changed();
+  }
+
+  resolvePasswordPrompt(decision) {
+    const p = this.passwordPrompt;
+    if (!p) return;
+    this.passwordPrompt = null;
+    try {
+      if (decision === 'save') passwords.save({ origin: p.origin, username: p.username, password: p.password });
+      else if (decision === 'never') passwords.addNever(p.origin);
+    } catch (err) {
+      dialog.showMessageBox(this.win.win, { type: 'warning', message: 'Could not save the password', detail: err.message }).catch(() => {});
+    }
+    this.changed();
+  }
+
   _dropPermissionRequests() {
     for (const r of this.permissionRequests) r.resolve({ decision: 'dismiss', remember: false });
     this.permissionRequests = [];
@@ -367,6 +395,9 @@ class Tab {
       secure: /^https:/i.test(this.url),
       permission: this.permissionRequests[0]
         ? { id: this.permissionRequests[0].id, permission: this.permissionRequests[0].permission, origin: this.permissionRequests[0].origin, mediaTypes: this.permissionRequests[0].mediaTypes, externalURL: this.permissionRequests[0].externalURL, oneOff: this.permissionRequests[0].oneOff }
+        : null,
+      passwordPrompt: this.passwordPrompt
+        ? { id: this.passwordPrompt.id, origin: this.passwordPrompt.origin, username: this.passwordPrompt.username, update: this.passwordPrompt.update }
         : null,
       find: this.find,
       pending: !!this.pending
@@ -403,6 +434,7 @@ class Tab {
 
   destroy() {
     this._dropPermissionRequests();
+    this.passwordPrompt = null;
     try {
       if (!this.wc.isDestroyed()) this.wc.close();
     } catch {

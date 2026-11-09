@@ -135,28 +135,11 @@ function originOf(url) {
   }
 }
 
-// Minimal multi-part public suffix list. Not the full PSL — good enough to
-// keep e.g. "a.co.uk" and "b.co.uk" from being treated as the same site.
-const MULTI_PART_SUFFIXES = new Set([
-  'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'ltd.uk', 'plc.uk', 'net.uk', 'sch.uk',
-  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'co.nz', 'org.nz', 'net.nz',
-  'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp', 'co.kr', 'or.kr', 'com.br', 'net.br', 'org.br',
-  'com.cn', 'net.cn', 'org.cn', 'com.tw', 'com.hk', 'com.sg', 'com.my', 'co.in', 'net.in', 'org.in',
-  'co.za', 'com.mx', 'com.ar', 'com.tr', 'co.il', 'com.ua', 'co.id', 'com.ph', 'com.vn', 'com.eg',
-  'github.io', 'gitlab.io', 'herokuapp.com', 'vercel.app', 'netlify.app', 'pages.dev', 'workers.dev',
-  'web.app', 'firebaseapp.com', 'blogspot.com', 'azurewebsites.net', 'cloudfront.net', 's3.amazonaws.com'
-]);
+const { registrableDomain } = require('./psl');
 
-/** Approximate registrable domain ("eTLD+1") for third-party checks. */
+/** Registrable domain ("eTLD+1") for third-party checks, using the Public Suffix List. */
 function siteOf(hostname) {
-  const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
-  if (!host || isIPv4(host) || host.startsWith('[') || !host.includes('.')) return host;
-  const labels = host.split('.');
-  const lastTwo = labels.slice(-2).join('.');
-  if (MULTI_PART_SUFFIXES.has(lastTwo) && labels.length >= 3) return labels.slice(-3).join('.');
-  const lastThree = labels.slice(-3).join('.');
-  if (MULTI_PART_SUFFIXES.has(lastThree) && labels.length >= 4) return labels.slice(-4).join('.');
-  return lastTwo;
+  return registrableDomain(hostname);
 }
 
 module.exports = {

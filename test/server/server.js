@@ -36,6 +36,17 @@ function handler(req, res) {
       return send(200, 'text/html', page('Leave', '<h1>beforeunload page</h1><script>addEventListener("beforeunload", e => { e.preventDefault(); e.returnValue = "" })</script>'));
     case '/fs':
       return send(200, 'text/html', page('Fullscreen', '<button id="go" onclick="document.getElementById(\'box\').requestFullscreen()">Fullscreen</button><div id="box" style="background:#7c3aed;color:#fff;padding:40px">Fullscreen box</div>'));
+    case '/login':
+      return send(200, 'text/html', page('Login', '<form id="f" method="post" action="/welcome"><input id="u" name="username" autocomplete="username"><input id="p" name="password" type="password" autocomplete="current-password"><button id="go" type="submit">Sign in</button></form>'));
+    case '/welcome':
+      return send(200, 'text/html', page('Welcome', '<h1>Welcome</h1>'));
+    case '/auth': {
+      const ok = req.headers.authorization === 'Basic ' + Buffer.from('vexa:secret').toString('base64');
+      if (ok) return send(200, 'text/html', page('Authorized', '<h1 id="r">authorized</h1>'));
+      return send(401, 'text/html', page('Denied', '<h1>401</h1>'), { 'www-authenticate': 'Basic realm="Vexa test"' });
+    }
+    case '/contact':
+      return send(200, 'text/html', page('Contact', '<form><input id="fn" name="first_name"><input id="em" type="email" name="email"><input id="zip" name="postal_code"><select id="co" name="country"><option value="">-</option><option value="US">United States</option><option value="GB">United Kingdom</option></select></form>'));
     case '/favicon.svg':
       return send(200, 'image/svg+xml', FAVICON);
     // third-party cookie test: top page on one host embeds another host

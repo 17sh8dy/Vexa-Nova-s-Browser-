@@ -129,6 +129,21 @@ class Bookmarks extends EventEmitter {
     this._changed();
   }
 
+  /** Replace the whole tree (used by sync). Returns false, changing nothing, if `data` isn't a valid tree. */
+  replaceAll(data) {
+    const nodes = data && data.nodes;
+    if (!nodes || typeof nodes !== 'object' || !nodes[ROOTS.bar] || !nodes[ROOTS.other]) return false;
+    for (const [id, n] of Object.entries(nodes)) {
+      if (!n || n.id !== id || !['folder', 'bookmark'].includes(n.type)) return false;
+      if (n.type === 'folder' && (!Array.isArray(n.children) || n.children.some((c) => !nodes[c]))) return false;
+      if (n.type === 'bookmark' && (typeof n.url !== 'string' || !n.url)) return false;
+    }
+    this.store.data.nodes = structuredClone(nodes);
+    this.store.data.nextId = Math.max(Number(data.nextId) || 1, this.store.data.nextId || 1);
+    this._changed();
+    return true;
+  }
+
   allBookmarks() {
     return Object.values(this.nodes).filter((n) => n.type === 'bookmark');
   }

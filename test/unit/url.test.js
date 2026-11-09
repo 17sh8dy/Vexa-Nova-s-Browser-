@@ -63,3 +63,12 @@ test('displayUrl hides the new tab page', () => {
   assert.strictEqual(displayUrl('vexa://newtab/'), '');
   assert.strictEqual(displayUrl('https://a.com/'), 'https://a.com/');
 });
+
+test('siteOf uses the full Public Suffix List', () => {
+  assert.strictEqual(siteOf('a.b.c.example.com.au'), 'example.com.au');
+  assert.strictEqual(siteOf('foo.bar.kobe.jp'), 'foo.bar.kobe.jp'); // wildcard rule *.kobe.jp
+  assert.strictEqual(siteOf('city.kobe.jp'), 'city.kobe.jp'); // exception rule !city.kobe.jp
+  assert.strictEqual(siteOf('x.myshopify.com'), 'x.myshopify.com'); // private suffix
+  assert.strictEqual(siteOf('co.uk'), 'co.uk');
+  assert.strictEqual(siteOf('sub.example.xyz'), 'example.xyz');
+});

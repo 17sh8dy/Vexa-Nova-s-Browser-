@@ -3,7 +3,7 @@
 Vexa is Nova's desktop web browser: a real Chromium-engine browser with its own
 interface, privacy defaults and violet Nova identity.
 
-> Status: **0.1.0, first working version.** Core browsing is complete and covered by
+> Status: **0.5.0.** Core browsing is complete and covered by
 > automated end-to-end tests. See [Known limitations](#known-limitations) for what
 > isn't there yet.
 
@@ -40,7 +40,7 @@ npm start          # launches Vexa
 npm run dist:win
 ```
 
-Produces `dist\Vexa-Setup-0.1.0.exe` (installer) and `dist\Vexa-Portable-0.1.0.exe`.
+Produces `dist\Vexa-Setup-0.5.0.exe` (installer) and `dist\Vexa-Portable-0.5.0.exe`.
 The exe isn't code-signed, so Windows SmartScreen will warn ("More info → Run anyway").
 
 ---
@@ -62,6 +62,13 @@ The exe isn't code-signed, so Windows SmartScreen will warn ("More info → Run 
 | **Settings** | Startup behaviour, home page, theme (system / light / dark), search engine (DuckDuckGo default, Google, Bing, Brave, Ecosia, Startpage), bookmarks bar, download location, privacy, permissions |
 | **Privacy** | Private windows (in-memory session, nothing saved), Do Not Track + Global Privacy Control, third-party cookie blocking, clear browsing data, clear on exit, per-site permission prompts (camera, mic, location, notifications, …) with remembered decisions |
 | **Persistence** | Settings, bookmarks, history, downloads list, open tabs (restored lazily on startup), window size/position |
+| **Passwords & autofill** | Offers to save logins after you sign in (never in private windows, "Never for this site" supported); fills a site's login automatically when you have exactly one saved, or via right-click → *Fill saved password*; manager in Settings (show / copy / edit / delete / add, CSV import & export); right-click → *Autofill contact details* from a saved profile (no payment cards). Passwords are encrypted with the OS keystore (Windows DPAPI, macOS Keychain, libsecret/kwallet) — if the OS can't encrypt, nothing is stored |
+| **Sync** | Server-less: one end-to-end encrypted file (scrypt → AES-256-GCM, passphrase you choose) in a folder you point at OneDrive / Dropbox / Google Drive / Syncthing. Syncs bookmarks, passwords, autofill details and main settings; history, tabs and downloads stay per device |
+| **Extensions** | *Load unpacked* Chrome extensions from Settings (content scripts, background workers, storage, …) |
+| **Windows & tabs** | Drag a tab off the strip to tear it into its own window, or onto another window's strip to move it there — the live page moves, it isn't reloaded. Also *Move tab to new window / to window ▸* in the tab menu |
+| **Default browser** | Settings → *Make Vexa the default*. Registers Vexa with Windows (per-user, no admin rights) and opens Default apps, where Windows requires **you** to confirm the choice; macOS/Linux use the system protocol-handler API. Installer builds register at every start and clean up on uninstall |
+| **Sign-in prompts** | HTTP Basic / Digest / proxy authentication dialog, with saved logins offered and optional "Save this login" |
+| **Clear data time range** | Last hour / 24 hours / 7 days / 4 weeks / all time for history and the download list (see limitations for cookies and cache) |
 
 ### Keyboard shortcuts
 
@@ -126,14 +133,19 @@ src/
     tab.js           a tab: WebContentsView + navigation/loading/error state
     sessions.js      vexa:// protocol, privacy headers, cookie blocking, permissions, clear data
     settings.js, history.js, bookmarks.js, downloads.js, store.js   data stores
+    passwords.js, autofill.js   password manager (OS-keystore encrypted) and contact details
+    sync.js          encrypted folder sync · extensions.js  unpacked extensions
+    default-browser.js  default-browser registration · auth-prompt.js  HTTP sign-in dialog
+    psl.js + data/   Public Suffix List lookup used by third-party-cookie blocking
     url.js           address-bar resolution (pure, unit tested)
     shortcuts.js     keyboard bindings
     context-menu.js  page / tab / bookmark context menus
     ipc.js           IPC entry points with sender checks
-  preload/         chrome.js (browser UI bridge), internal.js (vexa:// pages bridge)
-  renderer/        browser UI (chrome/), popup layer (overlay/), shared tokens + icons
+  preload/         chrome.js (browser UI bridge), internal.js (vexa:// pages bridge + in-page password/autofill glue), auth.js
+  renderer/        browser UI (chrome/), popup layer (overlay/), HTTP sign-in dialog (auth/), shared tokens + icons
   pages/           vexa:// pages: newtab, settings, history, bookmarks, downloads, shared/
-build/             app icons (svg / png / ico)
+build/             app icons (svg / png / ico), installer.nsh
+scripts/           use-widevine.js (opt-in DRM build)
 test/              unit tests, end-to-end runner, local test site
 ```
 
@@ -150,23 +162,51 @@ npm test            # unit tests (address-bar resolution etc.)
 npm run test:e2e    # launches the real app against a local test site and drives it
 ```
 
-The end-to-end suite (22 checks) covers navigation, search, error handling, tabs, popups,
+The end-to-end suite (32 checks) covers navigation, search, error handling, tabs, popups,
 bookmarks, suggestions, find, zoom, downloads, menus, history, settings, permission prompts,
-privacy headers and cookie blocking, clearing data, private windows, and restarting with
-session restore. It opens a real Vexa window while it runs.
+privacy headers and cookie blocking, clearing data (including time ranges), private windows,
+restarting with session restore, the password manager (save → encrypted on disk → auto-fill),
+contact-details autofill, HTTP sign-in prompts, moving a live tab between windows, loading an
+unpacked extension, and sync between two separate profiles. It opens real Vexa windows while it runs.
+
+> If your terminal sets `ELECTRON_RUN_AS_NODE` (the VS Code extension host does), unset it before
+> `npm run test:e2e` — otherwise Electron starts as plain Node and the app never opens.
+
+---
+
+## Protected video (DRM / Widevine)
+
+Stock Electron ships without Widevine, so Netflix, Disney+, Spotify's web player and similar
+sites won't play protected video. Vexa can run on the Widevine-enabled Electron build published by
+castlabs, but this is **opt-in** because it swaps the Electron binary for a third-party fork:
+
+```powershell
+npm run use-widevine        # edits package.json to the castlabs "+wvcus" build and reinstalls
+npm start                   # Vexa now downloads the Widevine CDM on first start (Settings → About shows it)
+npm run use-stock-electron  # go back
+```
+
+Vexa already waits for the Widevine component at startup when it is present. Spotify's web player
+and most Widevine-L3 sites should work as-is. **Netflix, Disney+, Prime Video and similar need the
+packaged app to be VMP-signed** with a free castlabs EVS account (see castlabs' "EVS" docs) before
+they will play. *Status: this path is wired up but has not been run yet, so treat it as untested until you've
+tried it once.*
 
 ---
 
 ## Known limitations
 
-These are honest gaps in 0.1.0 — none of them are presented as working in the UI:
+Things that were limitations in 0.1.0 and are now handled are described under *What works*.
+What remains, honestly:
 
-* **No DRM (Widevine).** Netflix, Disney+, Spotify's web player and similar protected video won't play. Stock Electron doesn't ship Widevine.
-* **Google sign-in may refuse** with "This browser or app may not be secure". Google blocks some embedded-Chromium browsers. Other sites sign in normally.
-* **No extensions, sync, password manager or form autofill.**
-* **HTTP basic-auth prompts** aren't implemented yet. Sites that need them show their 401 page.
-* **Location:** you can allow location access, but Chromium's location service needs a Google API key, so sites won't get a position.
-* **Third-party cookie blocking** works at the network level using an approximate site check (not the full Public Suffix List). It stops cookies being sent or set on cross-site requests, but third-party iframes can still use `document.cookie` within their own frame.
-* **Clear browsing data** clears all time. There's no time-range picker yet.
-* **Tabs can't be dragged** between windows. Vexa can't yet register itself as the default browser.
-* **Testing:** 0.1.0 was developed and tested on Linux, not Windows: the automated suite plus visual checks. The Windows-specific pieces (title-bar buttons, installer) are standard Electron, but should get a first look on Windows.
+* **DRM** is opt-in and untested (see above).
+* **Google sign-in:** Vexa now presents itself to Google as plain Chrome (user agent, Client Hints headers and `navigator.userAgentData` on Google's own hosts). That is the standard fix and removes the usual "This browser or app may not be secure" block, but Google decides this on its own signals and can change it at any time — **not verified against a live Google login**. If it still refuses, sign in with a different method or use a passkey/app-password; other sites are unaffected.
+* **Extensions:** only *unpacked* extensions load, and Electron implements only part of the Chrome extension API — no toolbar popups, no extension-managed tabs/windows, no Chrome Web Store installs, no `.crx` files. Extensions are not loaded in private windows.
+* **Passwords:** logins are detected on the top-level page only (not inside login iframes), and *Show*/*Copy* in Settings does not ask for your Windows password first. Anyone using your unlocked Windows account can read them, as with any browser without a master password.
+* **Sync** has no server and no live push: it syncs on start, every 5 minutes and shortly after changes. Passwords merge per entry; bookmarks, settings and autofill details are replaced as a whole by whichever device changed them last, so edits made on two devices between syncs can overwrite each other. A forgotten passphrase can't be recovered.
+* **Tab dragging:** moving a tab between windows by the menu is covered by automated tests; the mouse-drag gesture itself relies on the real cursor position and has not been exercised by an automated test, so give it a try by hand. Tabs can't move between a private and a normal window (they use separate sessions).
+* **Default browser:** Windows deliberately requires you to confirm the choice in Settings → Default apps; Vexa can register and open that page but cannot finish it for you. Dev runs (`npm start`) register the dev Electron binary.
+* **Location:** works once you paste a Google API key (with the Geolocation API enabled) in Settings → Site permissions and restart. Without one, sites can't get a position.
+* **Third-party cookie blocking** now uses the full Public Suffix List, but still works at the network level: third-party iframes can read/write `document.cookie` within their own frame.
+* **Clear browsing data:** the time range applies to history and the download list. Chromium can't clear cookies, site data or the cache by time range, so those are only cleared for *All time* (with a range chosen they're skipped, not over-deleted).
+* **Testing:** the automated suites pass on Windows 11 (unit tests and 32 end-to-end checks). Installer builds (`npm run dist:win`) were not rebuilt or run as part of this change.

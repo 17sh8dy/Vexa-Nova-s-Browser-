@@ -125,8 +125,19 @@
   }
   new ResizeObserver(updateNarrow).observe(tabsEl);
 
-  // Drag-to-reorder with pointer events.
+  // Drag a tab: along the strip to reorder; off the strip to tear it into its own window, or
+  // onto another Vexa window's strip to move it there (main decides, using the cursor position).
   let drag = null;
+  const STRIP_H = 40;
+  // Called by the main process when another window drops a tab on this strip.
+  window.__vexaTabIndexAt = (x) => {
+    const kids = [...tabsEl.children];
+    const i = kids.findIndex((c) => {
+      const r = c.getBoundingClientRect();
+      return x < r.left + r.width / 2;
+    });
+    return i < 0 ? kids.length : i;
+  };
   function wireTab(el) {
     el.addEventListener('pointerdown', (e) => {
       const id = Number(el.dataset.id);
@@ -137,26 +148,30 @@
       }
       if (e.button !== 0) return;
       cmd('activate-tab', { tabId: id });
-      drag = { el, id, startX: e.clientX, moved: false, pointerId: e.pointerId };
+      drag = { el, id, startX: e.clientX, moved: false, out: false, pointerId: e.pointerId };
       el.setPointerCapture(e.pointerId);
     });
     el.addEventListener('pointermove', (e) => {
       if (!drag || drag.el !== el) return;
       const dx = e.clientX - drag.startX;
-      if (!drag.moved && Math.abs(dx) < 6) return;
+      const out = e.clientY < -12 || e.clientY > STRIP_H + 24 || e.clientX < -12 || e.clientX > window.innerWidth + 12;
+      if (!drag.moved && Math.abs(dx) < 6 && !out) return;
       if (!drag.moved) {
         drag.moved = true;
         el.classList.add('dragging');
       }
-      el.style.transform = `translateX(${dx}px)`;
+      drag.out = out;
+      el.classList.toggle('tearing', out);
+      el.style.transform = out ? `translate(${dx}px, ${Math.max(-20, Math.min(e.clientY - STRIP_H / 2, 60))}px)` : `translateX(${dx}px)`;
     });
-    const end = (e) => {
+    const end = async (e) => {
       if (!drag || drag.el !== el) return;
       const d = drag;
       drag = null;
-      el.classList.remove('dragging');
+      el.classList.remove('dragging', 'tearing');
       el.style.transform = '';
       if (!d.moved) return;
+      // Work out the in-strip position first (the DOM may change while we wait).
       const r = el.getBoundingClientRect();
       const center = r.left + r.width / 2 + (e.clientX - d.startX);
       const others = [...tabsEl.children].filter((c) => c !== el);
@@ -165,7 +180,15 @@
         return center < cr.left + cr.width / 2;
       });
       if (index < 0) index = others.length;
-      cmd('move-tab', { tabId: d.id, index });
+      let result = 'reorder';
+      if (e.type === 'pointerup') {
+        try {
+          result = await cmd('tab-drop', { tabId: d.id, out: d.out });
+        } catch {
+          result = 'reorder';
+        }
+      }
+      if (result !== 'moved' && !d.out) cmd('move-tab', { tabId: d.id, index });
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
@@ -561,6 +584,34 @@
     cmd('permission', { tabId: t.id, reqId: t.permission.id, decision: b.dataset.decision, remember: permBar.querySelector('.infobar-remember input').checked });
   });
 
+  // ------------------------------------------------------------------ save-password bar
+  const pwBar = $('#password-bar');
+  function renderPasswordPrompt(t) {
+    const p = t && t.passwordPrompt;
+    pwBar.hidden = !p;
+    if (!p) return;
+    if (pwBar._id === p.id) return;
+    pwBar._id = p.id;
+    let host = p.origin;
+    try {
+      host = new URL(p.origin).host;
+    } catch {
+      /* keep origin */
+    }
+    pwBar.querySelector('.infobar-icon').innerHTML = I.shield;
+    const who = p.username ? ` for <strong>${escapeHtml(p.username)}</strong>` : '';
+    pwBar.querySelector('.infobar-text').innerHTML = p.update
+      ? `Update the saved password${who} on <strong>${escapeHtml(host)}</strong>?`
+      : `Save the password${who} on <strong>${escapeHtml(host)}</strong>?`;
+    pwBar.querySelector('[data-decision="save"]').textContent = p.update ? 'Update' : 'Save';
+  }
+  pwBar.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-decision]');
+    const t = activeTab();
+    if (!b || !t || !t.passwordPrompt) return;
+    cmd('password-decision', { tabId: t.id, decision: b.dataset.decision });
+  });
+
   // ------------------------------------------------------------------ find bar
   const findbar = $('#findbar');
   const findInput = $('#find-input');
@@ -743,6 +794,7 @@
     setAddressFromTab();
     renderBookmarksBar();
     renderPermission(t);
+    renderPasswordPrompt(t);
     renderFind(t);
     renderPanel(t);
     renderDownloads();

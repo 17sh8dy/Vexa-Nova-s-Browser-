@@ -24,7 +24,9 @@ const DEFAULTS = {
   permissionDefaults: { media: 'ask', geolocation: 'ask', notifications: 'ask', midiSysex: 'ask', 'clipboard-read': 'ask', 'display-capture': 'ask' },
   sitePermissions: {}, // { [origin]: { [permission]: 'allow' | 'block' } }
   hiddenTopSites: [],
-  suggestions: true
+  suggestions: true,
+  offerToSavePasswords: true,
+  googleApiKey: '' // lets Chromium's location service work; applied at next launch
 };
 
 // Validators: settings coming from renderer processes are never trusted blindly.
@@ -45,7 +47,9 @@ const VALIDATORS = {
   permissionDefaults: (v) => v && typeof v === 'object' && Object.entries(v).every(([k, x]) => PERMISSION_TYPES.includes(k) && ['ask', 'block'].includes(x)),
   sitePermissions: (v) => v && typeof v === 'object',
   hiddenTopSites: (v) => Array.isArray(v) && v.every((x) => typeof x === 'string'),
-  suggestions: (v) => typeof v === 'boolean'
+  suggestions: (v) => typeof v === 'boolean',
+  offerToSavePasswords: (v) => typeof v === 'boolean',
+  googleApiKey: (v) => typeof v === 'string' && v.length < 200 && /^[A-Za-z0-9_-]*$/.test(v)
 };
 
 class Settings extends EventEmitter {

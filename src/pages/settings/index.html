@@ -13,12 +13,16 @@
     <main class="main">
       <div class="page-head"><h1>Settings</h1></div>
       <nav class="jump" id="jump">
-        <a href="#general">General</a><a href="#appearance">Appearance</a><a href="#search">Search</a><a href="#privacy">Privacy</a><a href="#permissions">Site permissions</a><a href="#downloads">Downloads</a><a href="#about">About</a>
+        <a href="#general">General</a><a href="#appearance">Appearance</a><a href="#search">Search</a><a href="#privacy">Privacy</a><a href="#passwords">Passwords &amp; autofill</a><a href="#sync">Sync</a><a href="#extensions">Extensions</a><a href="#permissions">Site permissions</a><a href="#downloads">Downloads</a><a href="#about">About</a>
       </nav>
 
       <section class="section" id="general">
         <h2>General</h2>
         <div class="card">
+          <div class="row">
+            <div class="label"><b>Default browser</b><small id="default-status">Checking…</small></div>
+            <button class="btn small primary" id="make-default">Make Vexa the default</button>
+          </div>
           <div class="row">
             <div class="label"><b>On startup</b><small>What Vexa opens when it launches</small></div>
             <select data-setting="startup">
@@ -91,8 +95,10 @@
             <label><input type="checkbox" id="c-cache" checked /> <span><b>Cached images and files</b><small>Some sites may load more slowly next visit</small></span></label>
             <label><input type="checkbox" id="c-downloads" /> <span><b>Download list</b><small>Files on disk are kept</small></span></label>
             <label><input type="checkbox" id="c-permissions" /> <span><b>Site permissions</b><small>Camera, location and other decisions you've made</small></span></label>
+            <label><input type="checkbox" id="c-passwords" /> <span><b>Saved passwords</b><small>Removes every saved login from this device (and from synced devices)</small></span></label>
+            <label><input type="checkbox" id="c-autofill" /> <span><b>Autofill details</b><small>Your saved name, address and contact details</small></span></label>
           </div>
-          <div class="clear-actions"><span class="hint">Clears data from all time.</span><button class="btn primary" id="clear-now">Clear data</button></div>
+          <div class="clear-actions"><label class="range">Time range <select id="clear-range"><option value="hour">Last hour</option><option value="day">Last 24 hours</option><option value="week">Last 7 days</option><option value="month">Last 4 weeks</option><option value="all" selected>All time</option></select></label><span class="hint" id="clear-hint">Clears data from all time.</span><button class="btn primary" id="clear-now">Clear data</button></div>
         </div>
 
         <h2 class="sub-h">When Vexa closes</h2>
@@ -104,10 +110,66 @@
         </div>
       </section>
 
+      <section class="section" id="passwords">
+        <h2>Passwords &amp; autofill</h2>
+        <div class="card">
+          <div class="row">
+            <div class="label"><b>Offer to save passwords</b><small id="pw-storage-note">Passwords are encrypted with your operating system's keystore and never leave this device unless you turn on Sync.</small></div>
+            <label class="switch"><input type="checkbox" data-setting="offerToSavePasswords" /><span></span></label>
+          </div>
+        </div>
+        <h2 class="sub-h">Saved passwords</h2>
+        <div class="card" id="pw-list"></div>
+        <div class="btn-row">
+          <button class="btn small" id="pw-add">Add…</button>
+          <button class="btn small" id="pw-import">Import CSV…</button>
+          <button class="btn small" id="pw-export">Export CSV…</button>
+        </div>
+        <div class="card" id="pw-never-card" hidden>
+          <div class="row"><div class="label"><b>Never saved for</b><small>Sites where you chose “Never”</small></div></div>
+          <div id="pw-never"></div>
+        </div>
+        <h2 class="sub-h">Contact details for autofill</h2>
+        <p class="hint">Right-click a form field and choose “Autofill contact details”. Payment cards are not stored.</p>
+        <div class="card form-grid" id="af-form">
+          <label>First name<input data-af="firstName" autocomplete="off" /></label>
+          <label>Last name<input data-af="lastName" autocomplete="off" /></label>
+          <label>Email<input data-af="email" autocomplete="off" /></label>
+          <label>Phone<input data-af="phone" autocomplete="off" /></label>
+          <label class="wide">Company<input data-af="organization" autocomplete="off" /></label>
+          <label class="wide">Street address<input data-af="address1" autocomplete="off" /></label>
+          <label class="wide">Address line 2<input data-af="address2" autocomplete="off" /></label>
+          <label>City<input data-af="city" autocomplete="off" /></label>
+          <label>State / province<input data-af="state" autocomplete="off" /></label>
+          <label>ZIP / postal code<input data-af="zip" autocomplete="off" /></label>
+          <label>Country<input data-af="country" autocomplete="off" /></label>
+        </div>
+        <div class="btn-row"><button class="btn small primary" id="af-save">Save details</button></div>
+      </section>
+
+      <section class="section" id="sync">
+        <h2>Sync</h2>
+        <p class="hint">Vexa has no server. Sync keeps one end-to-end encrypted file in a folder you choose — put that folder inside OneDrive, Dropbox, Google Drive or Syncthing on each device and your bookmarks, passwords, autofill details and main settings follow you. History, tabs and downloads stay on each device.</p>
+        <div class="card" id="sync-card"></div>
+      </section>
+
+      <section class="section" id="extensions">
+        <h2>Extensions</h2>
+        <p class="hint">Load unpacked Chrome extensions (a folder containing <code>manifest.json</code>). Content scripts, background workers and storage work; toolbar popups and extension-managed tabs/windows are not supported by this engine yet. Only install extensions you trust — they can read the pages you visit.</p>
+        <div class="card" id="ext-list"></div>
+        <div class="btn-row"><button class="btn small" id="ext-add">Load unpacked extension…</button></div>
+      </section>
+
       <section class="section" id="permissions">
         <h2>Site permissions</h2>
         <p class="hint">What sites may do when they ask. “Ask” shows a prompt under the toolbar.</p>
         <div class="card" id="perm-defaults"></div>
+        <div class="card">
+          <div class="row">
+            <div class="label"><b>Location service key</b><small>Chromium's location lookup needs a Google API key (with the Geolocation API enabled) before sites can get a position. Takes effect after you restart Vexa.</small></div>
+            <input type="password" id="google-key" placeholder="AIza…" style="width: 280px" autocomplete="off" spellcheck="false" />
+          </div>
+        </div>
         <h2 class="sub-h">Per-site decisions</h2>
         <div class="card" id="perm-sites"></div>
       </section>
@@ -138,6 +200,7 @@
             <div class="about-name">Vexa <span id="ver"></span></div>
             <div class="about-sub">The Nova browser</div>
             <div class="about-meta" id="meta"></div>
+            <div class="about-meta" id="drm-note"></div>
             <button class="btn small" id="open-data">Open profile folder</button>
           </div>
         </div>

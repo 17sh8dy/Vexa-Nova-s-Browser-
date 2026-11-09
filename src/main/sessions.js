@@ -39,6 +39,17 @@ function cleanUserAgent() {
     .replace(/\svexa\/\S+/i, '');
 }
 
+// Google's sign-in refuses browsers it can't identify as Chrome. Besides dropping the
+// Electron token from the user agent, make the Client Hints headers say "Google Chrome".
+const GOOGLE_HOST = /(^|.)(google.[a-z.]+|youtube.com|gstatic.com|googleusercontent.com)$/i;
+function googleBrandHeaders() {
+  const major = String(process.versions.chrome || '130').split('.')[0];
+  return {
+    'sec-ch-ua': `"Chromium";v="${major}", "Google Chrome";v="${major}", "Not.A/Brand";v="99"`,
+    'sec-ch-ua-full-version-list': `"Chromium";v="${process.versions.chrome}", "Google Chrome";v="${process.versions.chrome}", "Not.A/Brand";v="99.0.0.0"`
+  };
+}
+
 function registerProtocol(ses, isPrivate = false) {
   ses.protocol.handle('vexa', async (request) => {
     let url;
@@ -116,6 +127,10 @@ function configureWebRequest(ses) {
     if (settings.get('blockThirdPartyCookies') && isThirdParty(details)) {
       delete headers.Cookie;
       delete headers.cookie;
+    }
+    if (GOOGLE_HOST.test(hostOf(details.url))) {
+      for (const k of Object.keys(headers)) if (/^sec-ch-ua(-full-version-list)?$/i.test(k)) delete headers[k];
+      Object.assign(headers, googleBrandHeaders());
     }
     callback({ requestHeaders: headers });
   });
@@ -205,14 +220,19 @@ function newPrivateSession() {
   return configureSession(ses, { isPrivate: true });
 }
 
-/** Clear browsing data. `what` = { history, cookies, cache, downloads, permissions } */
+/**
+ * Clear browsing data. `what` = { history, cookies, cache, downloads, permissions, passwords, autofill }.
+ * `since` (ms timestamp, 0 = all time) applies to history and the download list. Chromium
+ * can't clear cookies, site data or the cache by time range, so those are only ever
+ * cleared for "all time" — with a range they are skipped rather than over-deleting.
+ */
 async function clearBrowsingData(what, { since = 0 } = {}) {
   const { history } = require('./history');
   const ses = session.defaultSession;
   const jobs = [];
   if (what.history) history.clear(since);
-  if (what.downloads) downloads.clearFinished();
-  if (what.cookies) {
+  if (what.downloads) downloads.clearFinished(since);
+  if (what.cookies && !(since > 0)) {
     jobs.push(
       ses.clearStorageData({
         storages: ['cookies', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage']
@@ -220,12 +240,14 @@ async function clearBrowsingData(what, { since = 0 } = {}) {
     );
     jobs.push(ses.clearAuthCache());
   }
-  if (what.cache) {
+  if (what.cache && !(since > 0)) {
     jobs.push(ses.clearCache());
     jobs.push(ses.clearCodeCaches({}));
     jobs.push(ses.clearHostResolverCache());
   }
   if (what.permissions) settings.set('sitePermissions', {});
+  if (what.passwords && !(since > 0)) require('./passwords').passwords.clearAll();
+  if (what.autofill && !(since > 0)) require('./autofill').autofill.set({});
   await Promise.allSettled(jobs);
   return true;
 }

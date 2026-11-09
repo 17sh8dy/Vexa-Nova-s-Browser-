@@ -1,7 +1,7 @@
 'use strict';
 const path = require('path');
 const { EventEmitter } = require('events');
-const { BrowserWindow, WebContentsView, nativeTheme, clipboard } = require('electron');
+const { BrowserWindow, WebContentsView, nativeTheme, clipboard, screen } = require('electron');
 const { Tab } = require('./tab');
 const { settings } = require('./settings');
 const { history } = require('./history');
@@ -30,8 +30,9 @@ class VexaWindow extends EventEmitter {
    * @param {boolean} [opts.isPrivate]
    * @param {object}  [opts.restore]  { tabs: [...], activeIndex, bounds, maximized }
    * @param {string[]} [opts.urls]    URLs to open
+   * @param {import('./tab').Tab} [opts.transferTab] a live tab (released from another window) to start with
    */
-  constructor({ isPrivate = false, restore = null, urls = [], bounds = null } = {}) {
+  constructor({ isPrivate = false, restore = null, urls = [], bounds = null, transferTab = null } = {}) {
     super();
     this.id = nextWindowId++;
     this.isPrivate = isPrivate;
@@ -144,7 +145,9 @@ class VexaWindow extends EventEmitter {
     this.win.on('closed', () => nativeTheme.off('updated', this._onTheme));
 
     // Initial tabs
-    if (restore?.tabs?.length) {
+    if (transferTab) {
+      this.receiveTab(transferTab, 0);
+    } else if (restore?.tabs?.length) {
       const active = Math.min(restore.activeIndex || 0, restore.tabs.length - 1);
       const restored = restore.tabs.map((t, i) => this.addTab({ restore: t, lazy: i !== active, activate: false }));
       this.activateTab(restored[active].id);
@@ -371,6 +374,108 @@ class VexaWindow extends EventEmitter {
     this.tabs.splice(Math.max(0, Math.min(index, this.tabs.length)), 0, tab);
     this.sendState();
     this.emit('tabs-changed');
+  }
+
+  // ---------------------------------------------------------------- moving tabs between windows
+  /** Take a tab out of this window *without* destroying it, so another window can adopt it. */
+  releaseTab(id) {
+    const tab = this.getTab(id);
+    if (!tab) return null;
+    const index = this.tabs.indexOf(tab);
+    if (tab.attached) this._detachTab(tab);
+    if (this.activeTab === tab) {
+      this.activeTab = null;
+      const opener = tab.openerId != null ? this.getTab(tab.openerId) : null;
+      const next = opener || this.tabs[index + 1] || this.tabs[index - 1];
+      this.tabs.splice(index, 1);
+      if (next) this.activateTab(next.id);
+    } else {
+      this.tabs.splice(index, 1);
+    }
+    for (const t of this.tabs) if (t.openerId === tab.id) t.openerId = null;
+    tab.openerId = null;
+    this.setStatusUrl(tab, '');
+    this.sendState();
+    this.emit('tabs-changed');
+    return tab;
+  }
+
+  /** Adopt a live tab released by another window of the same kind (normal ↔ normal). */
+  receiveTab(tab, index = this.tabs.length) {
+    tab.win = this;
+    tab.attached = false;
+    const at = Math.max(0, Math.min(index, this.tabs.length));
+    this.tabs.splice(at, 0, tab);
+    const { width, height } = this.contentSize();
+    const top = Math.round(this.layoutInfo.chromeHeight);
+    tab.view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) });
+    this.activateTab(tab.id);
+    this.emit('tabs-changed');
+    return tab;
+  }
+
+  /** Is a screen point (DIPs) over this window's tab strip? */
+  stripContains(pt) {
+    if (this.win.isDestroyed() || this.win.isMinimized() || !this.win.isVisible()) return false;
+    const b = this.win.getContentBounds();
+    return pt.x >= b.x && pt.x < b.x + b.width && pt.y >= b.y && pt.y < b.y + TAB_STRIP_HEIGHT;
+  }
+
+  /**
+   * The user let go of a dragged tab. Returns 'moved' if it went to another window
+   * (or a new one), or 'reorder' if the strip should just reorder it in place.
+   */
+  async dropTab(id, { out = false } = {}) {
+    const tab = this.getTab(id);
+    if (!tab || this.isPrivate) return 'reorder'; // private windows have their own session: tabs can't leave
+    const app = require('./app-controller');
+    const pt = screen.getCursorScreenPoint();
+
+    const target = [...app.windows].find((w) => w !== this && !w.isPrivate && !w.closing && w.stripContains(pt));
+    if (target) {
+      const tb = target.win.getContentBounds();
+      let index = target.tabs.length;
+      try {
+        const i = await target.chrome.executeJavaScript(`window.__vexaTabIndexAt ? window.__vexaTabIndexAt(${Math.round(pt.x - tb.x)}) : -1`);
+        if (Number.isInteger(i) && i >= 0) index = i;
+      } catch {
+        /* append */
+      }
+      if (!this.getTab(id)) return 'moved';
+      const moved = this.releaseTab(id);
+      target.receiveTab(moved, index);
+      target.focus();
+      if (!this.tabs.length) this.win.close();
+      return 'moved';
+    }
+
+    // Dragged clear of the strip: tear it off into a window of its own.
+    if (out && this.tabs.length > 1) {
+      const b = this.win.getBounds();
+      const moved = this.releaseTab(id);
+      app.createWindow({ transferTab: moved, bounds: { x: Math.round(pt.x - 140), y: Math.round(pt.y - 16), width: b.width, height: b.height } });
+      return 'moved';
+    }
+    return 'reorder';
+  }
+
+  /** Menu/keyboard equivalent of dragging a tab out of the strip. */
+  moveTabToNewWindow(id) {
+    if (this.isPrivate || this.tabs.length < 2 || !this.getTab(id)) return false;
+    const app = require('./app-controller');
+    const b = this.win.getBounds();
+    const moved = this.releaseTab(id);
+    app.createWindow({ transferTab: moved, bounds: { x: b.x + 36, y: b.y + 36, width: b.width, height: b.height } });
+    return true;
+  }
+
+  moveTabToWindow(id, target) {
+    if (!target || target === this || target.isPrivate || this.isPrivate || target.closing || !this.getTab(id)) return false;
+    const moved = this.releaseTab(id);
+    target.receiveTab(moved);
+    target.focus();
+    if (!this.tabs.length) this.win.close();
+    return true;
   }
 
   duplicateTab(id) {
@@ -657,6 +762,17 @@ class VexaWindow extends EventEmitter {
         return this.activateTab(args.tabId);
       case 'close-tab':
         return this.closeTab(args.tabId);
+      case 'autofill-contact':
+        if (tab && !tab.error && /^https?:/.test(tab.url)) tab.wc.send('vexa:af-fill', require('./autofill').autofill.get());
+        return;
+      case 'tab-to-new-window':
+        return this.moveTabToNewWindow(args.tabId);
+      case 'tab-to-window':
+        return this.moveTabToWindow(args.tabId, [...require('./app-controller').windows].find((x) => x.id === args.windowId));
+      case 'tab-drop':
+        return this.dropTab(args.tabId, { out: !!args.out });
+      case 'password-decision':
+        return tab && tab.resolvePasswordPrompt(args.decision === 'save' ? 'save' : args.decision === 'never' ? 'never' : 'dismiss');
       case 'move-tab':
         return this.moveTab(args.tabId, Number(args.index));
       case 'mute-tab':

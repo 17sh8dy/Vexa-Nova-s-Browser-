@@ -4,7 +4,9 @@
 const { Menu, clipboard, shell } = require('electron');
 const { settings } = require('./settings');
 const { bookmarks } = require('./bookmarks');
-const { searchUrl, SEARCH_ENGINES } = require('./url');
+const { searchUrl, SEARCH_ENGINES, originOf } = require('./url');
+const { passwords } = require('./passwords');
+const { autofill } = require('./autofill');
 
 function truncate(s, n = 28) {
   s = String(s).replace(/\s+/g, ' ').trim();
@@ -65,6 +67,23 @@ function showPageMenu(tab, params) {
     t.push({ label: 'Paste as plain text', role: 'pasteAndMatchStyle', enabled: f.canPaste });
     t.push({ label: 'Select all', role: 'selectAll', enabled: f.canSelectAll });
     sep();
+    // Password manager and autofill.
+    const origin = originOf(tab.url);
+    const logins = /^https?:/.test(origin) && passwords.available() ? passwords.forOrigin(origin) : [];
+    if (logins.length) {
+      t.push({
+        label: 'Fill saved password',
+        submenu: logins.map((l) => ({
+          label: truncate(l.username || '(no username)', 40),
+          click: () => {
+            wc.send('vexa:pm-fill', { username: l.username, password: l.password });
+            passwords.markUsed(l.id);
+          }
+        }))
+      });
+    }
+    if (!autofill.isEmpty()) t.push({ label: 'Autofill contact details', click: () => wc.send('vexa:af-fill', autofill.get()) });
+    sep();
   } else if (params.selectionText && params.selectionText.trim()) {
     const text = params.selectionText.trim();
     t.push({ label: 'Copy', role: 'copy' });
@@ -91,6 +110,20 @@ function showPageMenu(tab, params) {
   Menu.buildFromTemplate(t).popup({ window: win.win });
 }
 
+/** "Move to new window" / "Move to window ▸" (normal windows only; private ones have their own session). */
+function moveItems(win, tab) {
+  if (win.isPrivate) return [];
+  const others = [...require('./app-controller').windows].filter((w) => w !== win && !w.isPrivate && !w.closing && !w.win.isDestroyed());
+  const items = [{ label: 'Move tab to new window', enabled: win.tabs.length > 1, click: () => win.moveTabToNewWindow(tab.id) }];
+  if (others.length) {
+    items.push({
+      label: 'Move tab to window',
+      submenu: others.map((w, i) => ({ label: truncate(`${i + 1}. ${w.activeTab ? w.activeTab.title || w.activeTab.url : 'Window'}`, 44), click: () => win.moveTabToWindow(tab.id, w) }))
+    });
+  }
+  return items;
+}
+
 function showTabMenu(win, tab) {
   if (!tab) return;
   const idx = win.tabs.indexOf(tab);
@@ -102,6 +135,8 @@ function showTabMenu(win, tab) {
     { label: 'Duplicate', click: () => win.duplicateTab(tab.id) },
     { label: muted ? 'Unmute tab' : 'Mute tab', click: () => (tab.wc.setAudioMuted(!muted), tab.changed()) },
     { label: bookmarks.isBookmarked(tab.url) ? 'Remove bookmark' : 'Bookmark tab', enabled: /^(https?|file):/.test(tab.url), click: () => bookmarks.toggle(tab.url, tab.title) },
+    { type: 'separator' },
+    ...moveItems(win, tab),
     { type: 'separator' },
     { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => win.closeTab(tab.id) },
     { label: 'Close other tabs', enabled: win.tabs.length > 1, click: () => win.closeOtherTabs(tab.id) },

@@ -156,8 +156,9 @@ class Downloads extends EventEmitter {
   }
 
   /** Remove finished entries from the list (files are kept). */
-  clearFinished() {
-    const keep = (r) => this.live.has(r.id);
+  /** Forget finished downloads (optionally only those started at or after `since`). Files stay on disk. */
+  clearFinished(since = 0) {
+    const keep = (r) => this.live.has(r.id) || (since > 0 && r.startTime < since);
     this.store.data.items = this.store.data.items.filter(keep);
     this.privateRecords = this.privateRecords.filter(keep);
     this.store.save();

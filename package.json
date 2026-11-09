@@ -1,8 +1,8 @@
 {
   "name": "vexa",
   "productName": "Vexa",
-  "version": "0.1.0",
-  "description": "Vexa \u2014 the Nova web browser. A fast, private, Chromium-based desktop browser.",
+  "version": "0.5.0",
+  "description": "Vexa — the Nova web browser. A fast, private, Chromium-based desktop browser.",
   "main": "src/main/main.js",
   "author": "Nova",
   "license": "UNLICENSED",
@@ -14,7 +14,9 @@
     "test:e2e": "node test/e2e/run.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "dist:win": "electron-builder --win nsis portable"
+    "dist:win": "electron-builder --win nsis portable",
+    "use-widevine": "node scripts/use-widevine.js",
+    "use-stock-electron": "node scripts/use-widevine.js --revert"
   },
   "repository": {
     "type": "git",
@@ -27,7 +29,7 @@
   "build": {
     "appId": "com.nova.vexa",
     "productName": "Vexa",
-    "copyright": "Copyright \u00a9 2026 Nova",
+    "copyright": "Copyright © 2026 Nova",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -48,7 +50,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "Vexa",
-      "artifactName": "Vexa-Setup-${version}.${ext}"
+      "artifactName": "Vexa-Setup-${version}.${ext}",
+      "include": "build/installer.nsh"
     },
     "portable": {
       "artifactName": "Vexa-Portable-${version}.${ext}"
@@ -62,8 +65,34 @@
       "target": [
         "AppImage"
       ],
-      "category": "Network"
+      "category": "Network",
+      "mimeTypes": [
+        "x-scheme-handler/http",
+        "x-scheme-handler/https",
+        "text/html"
+      ]
     },
-    "publish": null
+    "publish": null,
+    "protocols": [
+      {
+        "name": "Web link",
+        "schemes": [
+          "http",
+          "https"
+        ]
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "html",
+        "name": "HTML document",
+        "role": "Viewer"
+      },
+      {
+        "ext": "htm",
+        "name": "HTML document",
+        "role": "Viewer"
+      }
+    ]
   }
 }
