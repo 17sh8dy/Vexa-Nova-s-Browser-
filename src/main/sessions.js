@@ -20,6 +20,8 @@ const PROMPTABLE = new Set(['media', 'geolocation', 'notifications', 'midiSysex'
 // One-off prompts that are never remembered.
 const ONE_OFF = new Set(['openExternal']);
 
+const CSP = "default-src 'self' vexa:; img-src 'self' vexa: data: https: http: blob:; style-src 'self' vexa: 'unsafe-inline'; script-src 'self' vexa:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'";
+
 let prompter = null; // (webContents, request) => Promise<{ decision: 'allow'|'block'|'dismiss', remember: boolean }>
 const configured = new WeakSet();
 let privateCounter = 0;
@@ -37,7 +39,7 @@ function cleanUserAgent() {
     .replace(/\svexa\/\S+/i, '');
 }
 
-function registerProtocol(ses) {
+function registerProtocol(ses, isPrivate = false) {
   ses.protocol.handle('vexa', async (request) => {
     let url;
     try {
@@ -68,12 +70,13 @@ function registerProtocol(ses) {
     if (!file) return new Response('Not found', { status: 404 });
     const res = await net.fetch(pathToFileURL(file).href);
     const headers = new Headers(res.headers);
-    if (file.endsWith('.html')) {
-      headers.set(
-        'content-security-policy',
-        "default-src 'self' vexa:; img-src 'self' vexa: data: https: http: blob:; style-src 'self' vexa: 'unsafe-inline'; script-src 'self' vexa:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'"
-      );
+    if (isPrivate && file.endsWith('.html')) {
+      // Private windows get the private (dark indigo) look on internal pages too.
+      const html = (await res.text()).replace('<html lang="en">', '<html lang="en" class="private">');
+      headers.set('content-security-policy', CSP);
+      return new Response(html, { status: res.status, headers });
     }
+    if (file.endsWith('.html')) headers.set('content-security-policy', CSP);
     return new Response(res.body, { status: res.status, headers });
   });
 }
@@ -184,7 +187,7 @@ function configureSession(ses, { isPrivate = false } = {}) {
   if (configured.has(ses)) return ses;
   configured.add(ses);
   ses.setUserAgent(cleanUserAgent());
-  registerProtocol(ses);
+  registerProtocol(ses, isPrivate);
   configureWebRequest(ses);
   configurePermissions(ses, isPrivate);
   ses.setSpellCheckerEnabled(true);

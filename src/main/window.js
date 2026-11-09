@@ -146,7 +146,8 @@ class VexaWindow extends EventEmitter {
     // Initial tabs
     if (restore?.tabs?.length) {
       const active = Math.min(restore.activeIndex || 0, restore.tabs.length - 1);
-      restore.tabs.forEach((t, i) => this.addTab({ restore: t, lazy: i !== active, activate: i === active }));
+      const restored = restore.tabs.map((t, i) => this.addTab({ restore: t, lazy: i !== active, activate: false }));
+      this.activateTab(restored[active].id);
     } else if (urls.length) {
       urls.forEach((u, i) => this.addTab({ url: u, activate: i === 0 }));
     } else {
@@ -280,7 +281,7 @@ class VexaWindow extends EventEmitter {
     const { width, height } = this.contentSize();
     const top = Math.round(this.layoutInfo.chromeHeight);
     tab.view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) });
-    if (activate || !this.activeTab) this.activateTab(tab.id);
+    if (activate) this.activateTab(tab.id);
     else this.sendState();
     this.emit('tabs-changed');
     return tab;

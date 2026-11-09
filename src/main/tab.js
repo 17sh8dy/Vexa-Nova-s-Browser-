@@ -61,6 +61,12 @@ class Tab {
     if (!lazy && !webContents) this._load({ url, restore });
   }
 
+  _entryTitle(url) {
+    const t = this.wc.isDestroyed() ? '' : this.wc.getTitle();
+    if (!t || t === url || url.endsWith(t) || t.startsWith('http://') || t.startsWith('https://')) return '';
+    return t;
+  }
+
   _load({ url, restore }) {
     if (restore?.entries?.length && this.wc.navigationHistory?.restore) {
       this.wc.navigationHistory.restore({ entries: restore.entries, index: restore.index }).catch(() => {});
@@ -105,6 +111,7 @@ class Tab {
     });
     wc.on('did-stop-loading', () => {
       this.loading = false;
+      if (!this.title) this.title = this._entryTitle(wc.getURL());
       this._syncZoom();
       this.changed();
     });
@@ -124,7 +131,9 @@ class Tab {
 
     wc.on('did-navigate', (_e, url) => {
       this.url = url;
-      this.title = '';
+      // Restored and back/forward-cached entries already carry a title, and Chromium
+      // won't fire page-title-updated for them — so take it from the entry.
+      this.title = this._entryTitle(url);
       this.favicon = '';
       if (!this.isPrivate) history.addVisit(url, wc.getTitle());
       this.changed();
@@ -155,6 +164,12 @@ class Tab {
       if (!isMainFrame || code === -3) return;
       this.error = { code, description, url: validatedURL };
       this.url = validatedURL || this.url;
+      try {
+        this.title = new URL(this.url).host || this.url;
+      } catch {
+        this.title = this.url;
+      }
+      this.favicon = '';
       this.loading = false;
       this.win.layout();
       this.changed();

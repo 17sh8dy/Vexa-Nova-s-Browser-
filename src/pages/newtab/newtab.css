@@ -88,3 +88,4 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 .linkish:hover { text-decoration: underline; }
 .ntp-foot { position: relative; display: flex; justify-content: center; gap: 10px; padding: 18px; color: var(--text-faint); font-size: 12.5px; }
 .ntp-foot a { color: var(--text-dim); }
+.private .greeting { color: var(--accent-text); }

@@ -3,8 +3,11 @@
   const { call, esc, $ } = window.V;
   const I = window.VexaIcons;
 
+  const isPrivate = document.documentElement.classList.contains('private');
   const h = new Date().getHours();
-  $('#greeting').textContent = h < 5 ? 'Up late? The web never sleeps.' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  $('#greeting').textContent = isPrivate
+    ? 'Private window — history, cookies and site data are erased when you close it.'
+    : h < 5 ? 'Up late? The web never sleeps.' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
   $('#search-icon').innerHTML = I.search;
 
   async function setPlaceholder() {
@@ -20,6 +23,7 @@
   });
 
   async function renderTiles() {
+    if (isPrivate) return; // don't surface browsing history in private windows
     const [sites, s] = await Promise.all([call('history.topSites', 8), call('settings.get')]);
     const box = $('#tiles');
     box.innerHTML = '';

@@ -753,6 +753,7 @@
 
   api.on('state', (s) => {
     state = s;
+    window.__vexaState = s; // read by the end-to-end tests
     render();
   });
 

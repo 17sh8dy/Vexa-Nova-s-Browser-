@@ -42,7 +42,7 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.2px; }
   color: var(--text-dim);
 }
 .search:focus-within { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px var(--accent-soft); background: var(--raised); }
-.search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font: inherit; color: var(--text); }
+.search input, .search input[type="text"] { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: none; box-shadow: none; background: none; font: inherit; color: var(--text); }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   height: 36px; padding: 0 16px;
