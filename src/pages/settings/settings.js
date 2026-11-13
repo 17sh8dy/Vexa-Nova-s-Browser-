@@ -45,6 +45,7 @@
     for (const b of $$('#theme button')) b.classList.toggle('on', b.dataset.v === s.theme);
     for (const b of $$('#home-mode button')) b.classList.toggle('on', b.dataset.v === s.homeMode);
     $('#home-url-row').hidden = s.homeMode !== 'custom';
+    $('#vexa-search-note').hidden = s.searchEngine !== 'vexa';
     if (document.activeElement !== $('#home-url')) $('#home-url').value = s.homeUrl || '';
     renderPermDefaults();
     renderPermSites();

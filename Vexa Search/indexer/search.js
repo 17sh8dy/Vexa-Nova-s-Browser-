@@ -4,6 +4,7 @@
 // site:example.com, plus "did you mean" and autocomplete.
 
 const { words, termOf, fold } = require('./tokenize');
+const zlib = require('node:zlib');
 const { getMeta } = require('../store/db');
 
 const FIELDS = {
@@ -67,6 +68,15 @@ class Searcher {
     for (const f of Object.keys(FIELDS)) this.avg[f] = Math.max(1, Number(getMeta(this.db, `avg_${f}`, 1)));
     this.indexedAt = Number(getMeta(this.db, 'indexed_at', 0));
     this.docCache = new Map();
+    this.statsCache = null;
+  }
+
+  // Page text for snippets. The shipped index stores it zlib-compressed (BLOB).
+  contentOf(id) {
+    const c = this.q.content.get(id)?.content;
+    if (!c) return '';
+    if (typeof c === 'string') return c;
+    try { return zlib.inflateRawSync(c).toString('utf8'); } catch { return ''; }
   }
 
   docStats(id) {
@@ -177,7 +187,7 @@ class Searcher {
       url: r.page.url,
       host: r.page.host,
       title: r.page.title || r.page.url,
-      snippet: snippet({ ...r.page, body: this.q.content.get(r.id)?.content || '' }, query),
+      snippet: snippet({ ...r.page, body: this.contentOf(r.id) }, query),
       score: Number(r.score.toFixed(4)),
       category: r.page.category || null
     }));
@@ -223,13 +233,17 @@ class Searcher {
   }
 
   stats() {
-    const n = (sql) => this.db.prepare(sql).get().n;
-    return {
-      documents: this.N,
-      terms: n('SELECT COUNT(*) AS n FROM terms'),
-      hosts: n('SELECT COUNT(DISTINCT host) AS n FROM pages WHERE noindex = 0'),
-      indexedAt: this.indexedAt || null
-    };
+    if (!this.statsCache) {
+      const n = (sql) => this.db.prepare(sql).get().n;
+      this.statsCache = {
+        documents: this.N,
+        terms: n('SELECT COUNT(*) AS n FROM terms'),
+        // Hosts with at least one indexed page (works on the crawl DB and the shipped index).
+        hosts: n('SELECT COUNT(DISTINCT p.host) AS n FROM pages p JOIN docs d ON d.id = p.id'),
+        indexedAt: this.indexedAt || null
+      };
+    }
+    return this.statsCache;
   }
 }
 

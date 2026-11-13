@@ -51,4 +51,5 @@
 .sync-form .folder { display: flex; gap: 10px; align-items: center; }
 .sync-form .folder span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 500; }
 .sync-form input { width: 100%; box-sizing: border-box; }
+.pill.beta { background: var(--accent-soft); color: var(--accent-text); font-weight: 700; letter-spacing: 0.6px; font-size: 10.5px; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--surface); font-size: 11.5px; color: var(--text-dim); margin-left: 6px; }

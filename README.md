@@ -111,7 +111,8 @@ permission prompts, find-in-page, in-memory private sessions, printing, DevTools
 Electron exposes all of that from Chromium directly. Tauri's WebView2 backend only
 supports multiple webviews behind an unstable flag and gives far less control over
 downloads, storage and permissions; CEF would mean a C++ codebase. The trade-offs are
-a ~100 MB install and no Widevine DRM in stock Electron.
+a large install (~180 MB from 0.5.5, which bundles the Vexa Search index) and no Widevine
+DRM in stock Electron.
 
 * **Main process** (`src/main`) owns all state. The UI is a thin renderer: main pushes a
   state snapshot, the UI sends commands back over a whitelisted IPC bridge.
@@ -119,8 +120,14 @@ a ~100 MB install and no Widevine DRM in stock Electron.
   `history`, `bookmarks`, `downloads`), served from `src/pages` with a strict CSP. The tab
   preload exposes the `vexa` API *only* on `vexa://` pages and the main process re-checks
   the caller's URL on every call — websites get nothing.
+* **Vexa Search (beta)** is Nova's own search engine (`Vexa Search/`), offered as
+  "Vexa Search (Beta)" in Settings → Search. It runs in the main process and is served at
+  `vexa://search/`; its index ships with the app (`resources/vexa-search/`), so searching works
+  offline and queries never leave the computer. The results page shows text from the web, so it
+  is deliberately *not* privileged: the preload and the IPC check both exclude `vexa://search`.
+  Rebuild the shipped index with `node "Vexa Search/tools/export-index.js"` before `npm run dist`.
 * **Data** is JSON in the profile folder, written atomically (temp file + rename) with
-  debouncing — no native database dependency.
+  debouncing. The only database is Vexa Search's read-only index (Node's built-in `node:sqlite`).
 * **Security:** every renderer runs with `sandbox: true`, `contextIsolation: true`, no Node
   integration; `<webview>` tags are blocked; certificate errors are never bypassed.
 

@@ -6,7 +6,8 @@
 //    isolated world (the page cannot see or call any of it).
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
-if (location.protocol === 'vexa:') {
+// vexa://search shows text from the open web, so it never gets the API.
+if (location.protocol === 'vexa:' && location.hostname !== 'search') {
   const listeners = new Map();
   ipcRenderer.on('vexa:event', (_e, name, payload) => {
     for (const fn of listeners.get(name) || []) {

@@ -9,6 +9,7 @@ const { app, net, session } = require('electron');
 const { settings } = require('./settings');
 const { downloads } = require('./downloads');
 const { siteOf, hostOf, originOf, INTERNAL_PAGES } = require('./url');
+const vexaSearch = require('./vexa-search');
 
 const PAGES_DIR = path.join(__dirname, '..', 'pages');
 const RENDERER_SHARED = path.join(__dirname, '..', 'renderer', 'shared');
@@ -59,6 +60,8 @@ function registerProtocol(ses, isPrivate = false) {
       return new Response('Bad request', { status: 400 });
     }
     const host = url.hostname;
+    // Vexa Search (beta) has its own handler and is not a privileged page.
+    if (host === 'search') return vexaSearch.handleRequest(request.url);
     if (!INTERNAL_PAGES.includes(host) && host !== 'shared') {
       return new Response(`<!doctype html><meta charset=utf-8><title>Not found</title><body style="font-family:system-ui;padding:40px">vexa://${host} doesn't exist.`, {
         status: 404,

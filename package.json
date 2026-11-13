@@ -1,7 +1,7 @@
 {
   "name": "vexa",
   "productName": "Vexa",
-  "version": "0.5.0",
+  "version": "0.5.5",
   "description": "Vexa — the Nova web browser. A fast, private, Chromium-based desktop browser.",
   "main": "src/main/main.js",
   "author": "Nova",
@@ -37,7 +37,11 @@
     "files": [
       "src/**/*",
       "build/icon.png",
-      "package.json"
+      "package.json",
+      "Vexa Search/indexer/**/*",
+      "Vexa Search/store/**/*",
+      "Vexa Search/server/**/*",
+      "Vexa Search/VexaBot/identity.js"
     ],
     "win": {
       "icon": "build/icon.ico",
@@ -92,6 +96,12 @@
         "ext": "htm",
         "name": "HTML document",
         "role": "Viewer"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "Vexa Search/dist/vexa-search-index.db",
+        "to": "vexa-search/vexa-search-index.db"
       }
     ]
   }

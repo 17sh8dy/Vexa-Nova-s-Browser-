@@ -449,6 +449,44 @@ async function main() {
     sp.close();
   });
 
+  await check('Vexa Search (beta): option, note, results, no privileged API', async () => {
+    const shot = async (t, name) => {
+      if (!SHOTS) return;
+      fs.mkdirSync(ART, { recursive: true });
+      const { data } = await t.send('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(path.join(ART, name + '.png'), Buffer.from(data, 'base64'));
+    };
+    await typeAndGo('vexa://settings/#search');
+    const sp = await tabTarget((u) => u.startsWith('vexa://settings'), 'settings');
+    await waitFor(() => sp.eval(`[...document.querySelectorAll('#engine option')].some((o) => o.value === 'vexa' && /Vexa Search \\(Beta\\)/.test(o.textContent))`), { label: 'Vexa Search option' });
+    assert(await sp.eval(`document.getElementById('vexa-search-note').hidden`), 'note hidden while another engine is selected');
+    await sp.eval(`(() => { const e = document.getElementById('engine'); e.value = 'vexa'; e.dispatchEvent(new Event('change')); })()`);
+    await waitFor(() => JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8')).searchEngine === 'vexa', { label: 'saved vexa engine' });
+    await waitFor(() => sp.eval(`!document.getElementById('vexa-search-note').hidden && document.getElementById('vexa-search-note').textContent.includes('BETA')`), { label: 'beta note shown' });
+    await shot(sp, 'vexa-search-settings');
+    sp.close();
+
+    await waitFor(async () => (await state()).settings.searchEngineName === 'Vexa Search (Beta)', { label: 'chrome sees Vexa Search' });
+    await typeAndGo('rust programming language');
+    await waitFor(async () => (await active()).url.startsWith('vexa://search/?q=rust%20programming%20language'), { label: 'vexa search url' });
+    const rp = await tabTarget((u) => u.startsWith('vexa://search/'), 'results page');
+    await waitFor(() => rp.eval(`document.querySelectorAll('.result').length >= 3`), { label: 'results rendered', timeout: 15000 });
+    const info = await rp.eval(`({ beta: document.querySelector('.beta')?.textContent, first: document.querySelector('.result a.link')?.href, api: typeof window.vexa, count: document.querySelector('.count')?.textContent })`);
+    assert(info.beta === 'BETA', 'BETA label on results page');
+    assert(/^https?:\/\//.test(info.first || ''), 'results link to the web: ' + info.first);
+    assert(info.api === 'undefined', 'search page must not get the privileged vexa API');
+    await shot(rp, 'vexa-search-results');
+    rp.close();
+
+    // Put the engine back for the tests that follow.
+    await typeAndGo('vexa://settings');
+    const sp2 = await tabTarget((u) => u.startsWith('vexa://settings'), 'settings again');
+    await waitFor(() => sp2.eval(`document.querySelectorAll('#engine option').length > 3`), { label: 'settings loaded' });
+    await sp2.eval(`(() => { const e = document.getElementById('engine'); e.value = 'google'; e.dispatchEvent(new Event('change')); })()`);
+    await waitFor(async () => (await state()).settings.searchEngineName === 'Google', { label: 'engine restored' });
+    sp2.close();
+  });
+
   await check('permission prompt: allow notifications (remembered)', async () => {
     await typeAndGo(site + '/notify');
     await waitFor(async () => (await active()).permission, { label: 'permission request' });

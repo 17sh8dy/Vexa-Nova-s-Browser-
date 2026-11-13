@@ -118,4 +118,9 @@ function transaction(db, fn) {
   try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
-module.exports = { openDb, getMeta, setMeta, transaction };
+// Open a finished index for searching only (e.g. the one shipped in the Vexa app).
+function openIndexReadOnly(file) {
+  return new DatabaseSync(file, { readOnly: true });
+}
+
+module.exports = { openDb, openIndexReadOnly, getMeta, setMeta, transaction };

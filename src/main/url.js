@@ -8,7 +8,9 @@ const SEARCH_ENGINES = {
   bing: { name: 'Bing', url: 'https://www.bing.com/search?q=%s' },
   brave: { name: 'Brave Search', url: 'https://search.brave.com/search?q=%s' },
   ecosia: { name: 'Ecosia', url: 'https://www.ecosia.org/search?q=%s' },
-  startpage: { name: 'Startpage', url: 'https://www.startpage.com/do/search?query=%s' }
+  startpage: { name: 'Startpage', url: 'https://www.startpage.com/do/search?query=%s' },
+  // Nova's own engine, built into Vexa (see src/main/vexa-search.js). Beta.
+  vexa: { name: 'Vexa Search (Beta)', url: 'vexa://search/?q=%s', beta: true }
 };
 
 const INTERNAL_PAGES = ['newtab', 'settings', 'history', 'bookmarks', 'downloads'];

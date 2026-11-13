@@ -72,3 +72,12 @@ test('siteOf uses the full Public Suffix List', () => {
   assert.strictEqual(siteOf('co.uk'), 'co.uk');
   assert.strictEqual(siteOf('sub.example.xyz'), 'example.xyz');
 });
+
+test('Vexa Search (beta) is a selectable engine served at vexa://search', () => {
+  const { SEARCH_ENGINES, searchUrl, isInternal } = require('../../src/main/url');
+  assert.ok(SEARCH_ENGINES.vexa && SEARCH_ENGINES.vexa.beta);
+  assert.match(SEARCH_ENGINES.vexa.name, /Beta/);
+  assert.equal(searchUrl('rust & go', 'vexa'), 'vexa://search/?q=rust%20%26%20go');
+  assert.equal(resolveInput('open world games', 'vexa').url, 'vexa://search/?q=open%20world%20games');
+  assert.ok(isInternal('vexa://search/?q=x'));
+});

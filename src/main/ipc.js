@@ -35,7 +35,7 @@ const api = {
   // settings
   'settings.get': () => settings.get(),
   'settings.set': (_ctx, key, value) => settings.set(key, value),
-  'settings.engines': () => Object.entries(SEARCH_ENGINES).map(([id, e]) => ({ id, name: e.name })),
+  'settings.engines': () => Object.entries(SEARCH_ENGINES).map(([id, e]) => ({ id, name: e.name, beta: Boolean(e.beta) })),
   'settings.chooseDownloadDir': async (ctx) => {
     const res = await dialog.showOpenDialog(BrowserWindow.fromWebContents(ctx.win.chrome), {
       title: 'Choose download folder',
@@ -234,7 +234,7 @@ function register() {
 
   ipcMain.handle('vexa:api', async (event, method, ...args) => {
     const frameUrl = event.senderFrame?.url || '';
-    if (!frameUrl.startsWith('vexa://')) throw new Error('Not allowed');
+    if (!frameUrl.startsWith('vexa://') || frameUrl.startsWith('vexa://search')) throw new Error('Not allowed');
     const { win, tab } = controller.windowForWebContents(event.sender);
     if (!win || !tab) throw new Error('Unknown sender');
     const fn = api[method];
