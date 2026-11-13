@@ -1,0 +1,19 @@
+# Hosts VexaBot will not crawl or index during the beta (subdomains included).
+# One domain per line. Adult/pornographic sites are out of scope for Vexa Search;
+# see VexaBot/policy.js for the other signals (adult TLDs, RTA label, rating meta).
+pornhub.com
+xvideos.com
+xnxx.com
+xhamster.com
+redtube.com
+youporn.com
+tube8.com
+spankbang.com
+chaturbate.com
+stripchat.com
+onlyfans.com
+fansly.com
+brazzers.com
+rule34.xxx
+e-hentai.org
+nhentai.net

@@ -1,0 +1,18 @@
+{
+  "name": "vexa-search",
+  "version": "0.1.0-beta",
+  "description": "Vexa Search: Nova's own from-scratch search engine (VexaBot crawler, indexer, ranking, search page). Zero dependencies.",
+  "main": "vexa-search.js",
+  "bin": { "vexa-search": "vexa-search.js" },
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "Nova",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "crawl": "node vexa-search.js crawl",
+    "index": "node vexa-search.js index",
+    "serve": "node vexa-search.js serve",
+    "stats": "node vexa-search.js stats"
+  }
+}

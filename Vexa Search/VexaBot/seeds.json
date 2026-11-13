@@ -1,0 +1,100 @@
+{
+  "_comment": "Beta seed list. Higher priority crawls first. Categories match the beta coverage plan: technology, gaming, entertainment, education, news, reference. Removed (answer 403 to unknown crawlers, 2026-11-13): apnews.com, ign.com, gamespot.com, theguardian.com, eurogamer.net, rockpapershotgun.com.",
+  "seeds": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Main_Page",
+      "category": "reference",
+      "priority": 10
+    },
+    {
+      "url": "https://developer.mozilla.org/en-US/docs/Web",
+      "category": "technology",
+      "priority": 9
+    },
+    {
+      "url": "https://nodejs.org/en/learn",
+      "category": "technology",
+      "priority": 7
+    },
+    {
+      "url": "https://www.python.org/",
+      "category": "technology",
+      "priority": 7
+    },
+    {
+      "url": "https://www.rust-lang.org/learn",
+      "category": "technology",
+      "priority": 6
+    },
+    {
+      "url": "https://arstechnica.com/",
+      "category": "technology",
+      "priority": 6
+    },
+    {
+      "url": "https://www.theverge.com/",
+      "category": "technology",
+      "priority": 6
+    },
+    {
+      "url": "https://www.khanacademy.org/",
+      "category": "education",
+      "priority": 7
+    },
+    {
+      "url": "https://ocw.mit.edu/",
+      "category": "education",
+      "priority": 6
+    },
+    {
+      "url": "https://www.gutenberg.org/",
+      "category": "education",
+      "priority": 5
+    },
+    {
+      "url": "https://www.bbc.com/news",
+      "category": "news",
+      "priority": 8
+    },
+    {
+      "url": "https://www.npr.org/",
+      "category": "news",
+      "priority": 6
+    },
+    {
+      "url": "https://www.pcgamer.com/",
+      "category": "gaming",
+      "priority": 6
+    },
+    {
+      "url": "https://www.imdb.com/",
+      "category": "entertainment",
+      "priority": 5
+    },
+    {
+      "url": "https://www.rottentomatoes.com/",
+      "category": "entertainment",
+      "priority": 5
+    },
+    {
+      "url": "https://www.nasa.gov/",
+      "category": "education",
+      "priority": 6
+    },
+    {
+      "url": "https://www.nationalgeographic.com/",
+      "category": "education",
+      "priority": 5
+    },
+    {
+      "url": "https://www.polygon.com/",
+      "category": "gaming",
+      "priority": 6
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Video_game",
+      "category": "gaming",
+      "priority": 6
+    }
+  ]
+}
