@@ -25,6 +25,8 @@ class Crawler {
     this.inFlight = new Set();   // sites being fetched right now
     this.siteDone = new Map();   // site -> pages fetched (cap)
     this.candCache = { at: 0, rows: [] };
+    this.siteQueued = new Map(); // site -> URLs waiting (frontier bound)
+    this.seenHosts = new Set();  // origins whose root has been queued
     this.stats = { fetched: 0, indexed: 0, blocked: 0, disallowed: 0, failed: 0, skipped: 0, queued: 0 };
     this.onEvent = options.onEvent || (() => {});
     this.q = {
@@ -38,6 +40,7 @@ class Crawler {
           SELECT *, ROW_NUMBER() OVER (PARTITION BY site ORDER BY depth = 0 DESC, priority DESC, depth ASC, found_at ASC) AS rn
           FROM urls WHERE state = 'queued')
         WHERE rn = 1 ORDER BY priority DESC, depth ASC LIMIT 2000`),
+      siteQueuedCount: db.prepare("SELECT COUNT(*) AS n FROM urls WHERE site = ? AND state = 'queued'"),
       siteCount: db.prepare("SELECT COUNT(*) AS n FROM urls WHERE site = ? AND state = 'done'"),
       getRobots: db.prepare('SELECT * FROM robots WHERE host = ?'),
       putRobots: db.prepare(`INSERT INTO robots (host, status, body, fetched_at) VALUES (?, ?, ?, ?)
@@ -57,13 +60,21 @@ class Crawler {
 
   // ---- frontier -------------------------------------------------------
 
-  enqueue(url, { depth = 0, priority = 0, category = null } = {}) {
+  enqueue(url, { depth = 0, priority = 0, category = null, force = false } = {}) {
     const u = normalizeUrl(url);
     if (!u || looksLikeFile(u)) return false;
     const host = hostOf(u);
+    const site = siteOf(u);
+    // Bounded frontier: each site keeps at most maxQueuedPerSite waiting URLs
+    // (seeds always get in). Keeps scheduling fast as the crawl grows.
+    if (!force) {
+      if (!this.siteQueued.has(site)) this.siteQueued.set(site, this.q.siteQueuedCount.get(site).n);
+      if (this.siteQueued.get(site) >= this.o.maxQueuedPerSite) return false;
+    }
     const existing = this.q.getUrl.get(u);
     if (!existing) {
-      this.q.insertUrl.run(u, host, siteOf(u), depth, priority, category, this.now());
+      this.q.insertUrl.run(u, host, site, depth, priority, category, this.now());
+      this.siteQueued.set(site, (this.siteQueued.get(site) ?? 0) + 1);
       this.stats.queued++;
       return true;
     }
@@ -77,12 +88,27 @@ class Crawler {
       if (!u) continue;
       const row = this.q.getUrl.get(u);
       const pr = s.priority ?? 5;
-      if (!row) { this.enqueue(u, { depth: 0, priority: pr, category: s.category || null }); added++; continue; }
+      if (!row) {
+        this.enqueue(u, { depth: 0, priority: pr, category: s.category || null, force: true });
+        this.enqueueRoot(u, 0, pr);
+        added++;
+        continue;
+      }
       // Seeds are recrawled once they are older than recrawlAfterMs.
       const stale = !row.fetched_at || this.now() - row.fetched_at > this.o.recrawlAfterMs;
       if (row.state !== 'queued' && stale) { this.q.requeue.run(pr, 0, s.category || null, u); added++; }
     }
     return added;
+  }
+
+  // A site's root page is its most important page; queue it the first time
+  // the host is seen (the indexer also learns where "/" redirects to).
+  enqueueRoot(url, depth, priority) {
+    let origin;
+    try { origin = new URL(url).origin + '/'; } catch { return; }
+    if (this.seenHosts.has(origin)) return;
+    this.seenHosts.add(origin);
+    if (!hostBlockReason(new URL(origin).hostname)) this.enqueue(origin, { depth: Math.min(depth, this.o.maxDepth), priority, force: true });
   }
 
   mark(url, state, reason = null) {
@@ -134,7 +160,7 @@ class Crawler {
   }
 
   candidates(force = false) {
-    if (force || this.now() - this.candCache.at > 500 || !this.candCache.rows.length) {
+    if (force || this.now() - this.candCache.at > 1000 || !this.candCache.rows.length) {
       this.candCache = { at: this.now(), rows: this.q.candidates.all() };
     }
     return this.candCache.rows;
@@ -143,6 +169,8 @@ class Crawler {
   // ---- crawl loop -----------------------------------------------------
 
   async run({ maxPages = this.o.maxPages, signal } = {}) {
+    // URLs left mid-fetch by a crashed or killed run go back in the queue.
+    this.db.exec("UPDATE urls SET state = 'queued' WHERE state = 'fetching'");
     const running = new Set();
     let started = 0;
     const startNext = () => {
@@ -156,6 +184,7 @@ class Crawler {
         row.taken = true;
         this.inFlight.add(row.site);
         this.q.setState.run('fetching', null, now, row.url);
+        this.siteQueued.set(row.site, Math.max(0, (this.siteQueued.get(row.site) ?? 1) - 1));
         started++;
         const p = this.process(row)
           .catch((e) => this.mark(row.url, 'failed', e.message))
@@ -165,7 +194,6 @@ class Crawler {
             // URLs refused by robots.txt or policy are free.
             if (row.hitNetwork) this.nextAt.set(row.site, this.now() + this.hostDelay(row.host));
             else started--;
-            this.candCache.at = 0; // new links may have arrived
             running.delete(p);
           });
         running.add(p);
@@ -287,6 +315,7 @@ class Crawler {
       if (this.enqueue(to, { depth, priority, category: sameHost ? row.category : null })) {
         const why = hostBlockReason(new URL(to).hostname);
         if (why) this.mark(to, 'blocked', why);
+        else if (!sameHost) this.enqueueRoot(to, depth, priority + 1);
       }
     }
   }

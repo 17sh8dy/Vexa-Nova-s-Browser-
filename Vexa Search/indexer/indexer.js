@@ -14,6 +14,8 @@ const NL = String.fromCharCode(10); // block separator in page text
 const MAX_POSITIONS = 64;
 const FIELD_GAP = 50; // position gap between fields so phrases don't span them
 const MAX_ANCHORS = 60;
+// Anchor text that describes nothing about the target page.
+const GENERIC_ANCHOR = /^(here|click here|read more|more|learn more|see more|link|this|next|previous|prev|back|home|continue|details|more info|go|open|source|website|›|»|→)$/i;
 
 function urlText(url) {
   try {
@@ -56,17 +58,32 @@ function buildIndex(db, { onProgress = () => {} } = {}) {
   const content = stripBoilerplate(pages);
   const idByUrl = new Map(pages.map((p) => [p.url, p.id]));
 
-  // Anchor text and link graph.
+  // Anchor text, link graph and site authority (distinct other sites linking in).
+  const siteOfPage = new Map(db.prepare('SELECT id, url FROM pages').all().map((p) => [p.id, siteOf(p.url)]));
+  const referrers = new Map(); // site -> Set(of other sites linking to it)
   const anchors = new Map();
   const edges = [];
   for (const l of db.prepare('SELECT from_id, to_url, text FROM links').iterate()) {
+    const fromSite = siteOfPage.get(l.from_id);
+    const toSite = siteOf(l.to_url);
+    if (fromSite && toSite && fromSite !== toSite) {
+      if (!referrers.has(toSite)) referrers.set(toSite, new Set());
+      referrers.get(toSite).add(fromSite);
+    }
     const to = idByUrl.get(l.to_url);
     if (to === undefined) continue;
     edges.push([l.from_id, to]);
-    if (!l.text || l.from_id === to) continue;
+    if (!l.text || l.from_id === to || GENERIC_ANCHOR.test(l.text.trim())) continue;
     const list = anchors.get(to) || [];
     if (list.length < MAX_ANCHORS) { list.push(l.text); anchors.set(to, list); }
   }
+  // Homepages: root URLs, and wherever a root URL redirected to ("/" -> "/en-US/").
+  const homes = new Set();
+  for (const r of db.prepare("SELECT url, reason FROM urls WHERE reason LIKE 'redirect → %'").all()) {
+    try { if (new URL(r.url).pathname === '/') homes.add(r.reason.slice('redirect → '.length)); } catch { /* skip */ }
+  }
+  const isHome = (url) => { try { const u = new URL(url); return u.pathname === '/' && !u.search ? 1 : homes.has(url) ? 1 : 0; } catch { return 0; } };
+  const siteRank = (url) => Math.log2(1 + (referrers.get(siteOf(url))?.size || 0));
 
   const postings = new Map(); // term -> Map(docId -> posting)
   const wordFreq = new Map();
@@ -92,7 +109,7 @@ function buildIndex(db, { onProgress = () => {} } = {}) {
     const lb = addField(page.id, 'body', content.get(page.id), lt + lh + 2 * FIELD_GAP);
     const lu = addField(page.id, 'url', urlText(page.url), null);
     const la = addField(page.id, 'anchor', (anchors.get(page.id) || []).join(' . '), null);
-    docRows.push([page.id, lt, lh, lb, lu, la, content.get(page.id)]);
+    docRows.push([page.id, lt, lh, lb, lu, la, content.get(page.id), siteRank(page.url), isHome(page.url)]);
     totals.title += lt; totals.head += lh; totals.body += lb; totals.url += lu; totals.anchor += la;
     for (const w of words(`${page.title} ${page.headings} ${content.get(page.id)}`)) {
       if (w.length < 2 || w.length > 24 || !/^[\p{L}]+$/u.test(w)) continue;
@@ -106,7 +123,7 @@ function buildIndex(db, { onProgress = () => {} } = {}) {
 
   transaction(db, () => {
     db.exec('DELETE FROM postings; DELETE FROM terms; DELETE FROM docs; DELETE FROM words;');
-    const insDoc = db.prepare('INSERT INTO docs (id, len_title, len_head, len_body, len_url, len_anchor, content, pagerank) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insDoc = db.prepare('INSERT INTO docs (id, len_title, len_head, len_body, len_url, len_anchor, content, siterank, is_home, pagerank) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     for (const r of docRows) insDoc.run(...r, ranks.get(r[0]) ?? 1);
 
     const insTerm = db.prepare('INSERT INTO terms (term, df) VALUES (?, ?) RETURNING id');

@@ -160,3 +160,13 @@ test('site page cap: stops cleanly, keeps the queue, a higher cap resumes', asyn
   assert.ok(count('done') > 6);
   db.close();
 });
+
+test('a site root is queued when a seed is a deep page', async (t) => {
+  const site = await startSite();
+  t.after(() => site.close());
+  const db = openDb(':memory:');
+  const c = new Crawler(db, { allowPrivateHosts: true, minHostDelayMs: 0 });
+  c.addSeeds([{ url: site.origin + '/space', priority: 5 }]);
+  assert.ok(db.prepare('SELECT 1 FROM urls WHERE url = ?').get(site.origin + '/'));
+  db.close();
+});

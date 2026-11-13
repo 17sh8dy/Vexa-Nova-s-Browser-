@@ -190,3 +190,18 @@ test('minSpan: smallest window holding every term', () => {
   assert.equal(minSpan(['10', '11']), 2);
   assert.equal(minSpan(['10', null]), null);
 });
+
+test('ranking signals: navigational, language, utility pages, depth', () => {
+  const { pageFactors, hostTokens, parseQuery } = require('../indexer/search');
+  assert.deepEqual([...hostTokens('nova-legal.shadylabs.workers.dev')].sort(), ['legal', 'nova', 'novalegal']);
+  const f = (url, q, extra = {}) => pageFactors({ url, title: 'Page', lang: 'en', ...extra }, parseQuery(q), { siterank: 0 });
+  const home = f('https://nova-legal.shadylabs.workers.dev/', 'nova legal');
+  const inner = f('https://nova-legal.shadylabs.workers.dev/vexa-terms', 'nova legal');
+  const other = f('https://example.com/', 'nova legal');
+  assert.ok(home > inner && inner > other, `${home} ${inner} ${other}`);
+  assert.ok(f('https://nodejs.org/', 'node.js') > 2, 'joined words match "nodejs"');
+  assert.ok(f('https://x.org/a', 'cats', { lang: 'de' }) < f('https://x.org/a', 'cats'));
+  assert.ok(f('https://x.org/a', 'cats', { title: 'Log in' }) < f('https://x.org/a', 'cats'));
+  assert.equal(f('https://x.org/a', 'login', { title: 'Log in' }), f('https://x.org/a', 'login'));
+  assert.ok(f('https://x.org/a/b/c/d', 'cats') < f('https://x.org/a', 'cats'));
+});

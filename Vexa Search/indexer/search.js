@@ -51,8 +51,9 @@ class Searcher {
     this.q = {
       term: db.prepare('SELECT id, df FROM terms WHERE term = ?'),
       postings: db.prepare('SELECT doc_id, tf_title, tf_head, tf_body, tf_url, tf_anchor, pos FROM postings WHERE term_id = ?'),
-      doc: db.prepare('SELECT id, len_title, len_head, len_body, len_url, len_anchor, pagerank FROM docs WHERE id = ?'),
-      page: db.prepare('SELECT p.id, p.url, p.host, p.title, p.description, d.content AS body, p.category FROM pages p JOIN docs d ON d.id = p.id WHERE p.id = ?'),
+      doc: db.prepare('SELECT id, len_title, len_head, len_body, len_url, len_anchor, pagerank, siterank, is_home FROM docs WHERE id = ?'),
+      page: db.prepare('SELECT id, url, host, title, description, lang, category FROM pages WHERE id = ?'),
+      content: db.prepare('SELECT content FROM docs WHERE id = ?'),
       wordRange: db.prepare('SELECT word, freq FROM words WHERE word >= ? AND word < ? AND length(word) BETWEEN ? AND ? ORDER BY freq DESC LIMIT 4000'),
       prefix: db.prepare('SELECT word FROM words WHERE word >= ? AND word < ? ORDER BY freq DESC LIMIT ?'),
       wordFreq: db.prepare('SELECT freq FROM words WHERE word = ?')
@@ -140,6 +141,7 @@ class Searcher {
     }
 
     hits.sort((a, b) => b[1].s - a[1].s);
+    const matched = hits.length; // true count; only the best MAX_CANDIDATES are reranked
     hits = hits.slice(0, MAX_CANDIDATES);
 
     // Rerank: PageRank, title/phrase match, homepages; and site: filter.
@@ -164,8 +166,7 @@ class Searcher {
       const titleTerms = new Set(words(title).map(termOf));
       s *= 1 + 0.4 * (query.terms.filter((t) => titleTerms.has(t)).length / n);
       if (phraseText.length > 2 && title.includes(phraseText)) s *= 1.3;
-      const path = safePath(p.url);
-      if (path === '/' && query.words.some((w) => p.host.includes(w))) s *= 1.25;
+      s *= pageFactors(p, query, d);
       ranked.push({ id, score: s, page: p });
     }
     ranked.sort((a, b) => b.score - a.score);
@@ -176,13 +177,14 @@ class Searcher {
       url: r.page.url,
       host: r.page.host,
       title: r.page.title || r.page.url,
-      snippet: snippet(r.page, query),
+      snippet: snippet({ ...r.page, body: this.q.content.get(r.id)?.content || '' }, query),
       score: Number(r.score.toFixed(4)),
       category: r.page.category || null
     }));
 
     const suggestion = ordered.length < 3 ? this.didYouMean(query) : null;
-    return { query: query.raw, total: ordered.length, results, page, pageSize, suggestion, mode, ms: elapsed(t0) };
+    const total = query.sites.length ? ordered.length : Math.max(ordered.length, matched);
+    return { query: query.raw, total, results, page, pageSize, suggestion, mode, ms: elapsed(t0) };
   }
 
   // "Did you mean": swap unknown / rare words for a close, common word.
@@ -240,6 +242,61 @@ function hasPhrase(posMap, phrase) {
     if (phrase.every((t, i) => sets[i].has(p + t.off - base))) return true;
   }
   return false;
+}
+
+// ---- query-independent and navigational signals --------------------------
+
+// Host labels that say nothing about what a site is.
+const GENERIC_LABELS = new Set(['www', 'com', 'org', 'net', 'gov', 'edu', 'int', 'io', 'dev', 'app', 'co', 'uk', 'us',
+  'en', 'm', 'workers', 'pages', 'shadylabs', 'site', 'web', 'github', 'blogspot']);
+// Utility pages people rarely search for by topic.
+const UTILITY_TITLE = /^(log ?in|sign ?(in|up)|register|create (an )?account|privacy|cookie|terms|legal notice|subscribe|newsletter|404|page not found|not found|access denied|error|redirecting|search results?)\b/i;
+const UTILITY_WORDS = new Set(['login', 'log', 'sign', 'signin', 'signup', 'register', 'account', 'privacy', 'cookie', 'cookies', 'terms', 'legal', 'subscribe', 'newsletter']);
+
+function hostTokens(hostname) {
+  const labels = hostname.toLowerCase().split('.');
+  const toks = new Set();
+  for (const l of labels) {
+    if (GENERIC_LABELS.has(l)) continue;
+    toks.add(l.replace(/-/g, ''));               // "nova-legal" -> "novalegal"
+    for (const part of l.split('-')) if (part && !GENERIC_LABELS.has(part)) toks.add(part);
+  }
+  return toks;
+}
+
+// Multiplier from signals that don't depend on term statistics.
+function pageFactors(p, query, d) {
+  let f = 1;
+  let url;
+  try { url = new URL(p.url); } catch { return f; }
+  const depth = url.pathname.split('/').filter(Boolean).length;
+  const isRoot = (depth === 0 && !url.search) || d.is_home === 1;
+
+  // Navigational intent: the query names the site ("nova legal", "replay.gg",
+  // "node.js"). Its homepage should win, the rest of the site comes next.
+  const hostToks = hostTokens(url.hostname);
+  const qw = query.words.filter((w) => w.length > 1);
+  if (qw.length) {
+    const joined = qw.join('');
+    const covered = qw.filter((w) => hostToks.has(w)).length;
+    const allNamed = covered === qw.length || hostToks.has(joined);
+    if (allNamed) f *= isRoot ? 2.6 : 1.5;
+    else if (covered && isRoot) f *= 1 + 0.6 * (covered / qw.length);
+    else if (covered) f *= 1 + 0.15 * (covered / qw.length);
+  }
+
+  // Shallow pages are usually more central than deep ones.
+  f *= 1 / (1 + 0.04 * Math.max(0, depth - 1));
+
+  // English-first beta: other-language pages rank lower for Latin-script queries.
+  if (p.lang && !/^en\b|^en-/.test(p.lang) && /^[\x00-\x7f]*$/.test(query.raw)) f *= 0.55;
+
+  // Login/cookie/terms/404-style pages, unless that's what was asked for.
+  if (UTILITY_TITLE.test((p.title || '').trim()) && !query.words.some((w) => UTILITY_WORDS.has(w))) f *= 0.5;
+
+  // Site authority: how many other sites link to this site (log scale).
+  if (d.siterank) f *= 1 + 0.06 * Math.min(6, d.siterank);
+  return f;
 }
 
 // Smallest window (in word positions) containing every term at least once.
@@ -342,4 +399,4 @@ function snippet(page, query, size = 32) {
   return segs;
 }
 
-module.exports = { Searcher, parseQuery, damerau, hasPhrase, crowd, minSpan };
+module.exports = { Searcher, parseQuery, damerau, hasPhrase, crowd, minSpan, pageFactors, hostTokens };

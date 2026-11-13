@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS docs (
   id INTEGER PRIMARY KEY,      -- = pages.id
   len_title INTEGER, len_head INTEGER, len_body INTEGER, len_url INTEGER, len_anchor INTEGER,
   pagerank REAL NOT NULL DEFAULT 0,
+  siterank REAL NOT NULL DEFAULT 0, -- log2(1 + other sites linking to this page's site)
+  is_home INTEGER NOT NULL DEFAULT 0, -- the site's root, or the page its root redirects to
   content TEXT                 -- body with site boilerplate removed (indexed + used for snippets)
 );
 -- Surface words (unstemmed) for "did you mean" and autocomplete.
@@ -92,6 +94,11 @@ function openDb(file) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = OFF;');
   db.exec(SCHEMA);
+  // Columns added after a database was created.
+  const has = (table, col) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
+  if (!has('docs', 'content')) db.exec('ALTER TABLE docs ADD COLUMN content TEXT');
+  if (!has('docs', 'is_home')) db.exec('ALTER TABLE docs ADD COLUMN is_home INTEGER NOT NULL DEFAULT 0');
+  if (!has('docs', 'siterank')) db.exec('ALTER TABLE docs ADD COLUMN siterank REAL NOT NULL DEFAULT 0');
   const row = db.prepare("SELECT value FROM meta WHERE key = 'schema'").get();
   if (!row) db.prepare("INSERT INTO meta (key, value) VALUES ('schema', ?)").run(String(SCHEMA_VERSION));
   return db;

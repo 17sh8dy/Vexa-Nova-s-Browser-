@@ -11,11 +11,12 @@ the browser yet.
 
 ```sh
 cd "D:\Dev\Vexa\Vexa Search"
-npm test                                   # 29 tests, incl. a real crawl of a local test site
+npm test                                   # unit + end-to-end tests (real crawl of a local test site)
 node vexa-search.js crawl --max 300 --index # polite crawl of VexaBot/seeds.json, then index
 node vexa-search.js serve                  # http://127.0.0.1:8790/
 node vexa-search.js search "css grid"      # search from the terminal
 node vexa-search.js stats
+node tools/eval.js --verbose               # score ranking on the judged queries
 ```
 
 Crawl options: `--max N` (pages this run), `--depth N`, `--per-site N`, `--concurrency N`,
@@ -35,7 +36,8 @@ Crawl options: `--max N` (pages this run), `--depth N`, `--per-site N`, `--concu
 **Crawling.** One fetch at a time per *site* (registrable domain, from the Public Suffix List,
 so all `*.wikipedia.org` share one slot), at least 1.5 s apart or the robots Crawl-delay if longer.
 The best URL of each site is scheduled first, seeds before links, so one huge site can't starve
-the rest. A per-site page cap keeps the crawl broad; capped URLs stay queued for a later run.
+the rest. A per-site page cap keeps the crawl broad; capped URLs stay queued for a later run. Each site keeps at
+most 600 waiting URLs, so the frontier (and scheduling time) stays bounded as the crawl grows.
 Respects `noindex`/`nofollow` (meta robots, `meta name="vexabot"`, `X-Robots-Tag`, `rel=nofollow`),
 follows same-host canonicals, drops tracking parameters, skips exact-duplicate pages.
 
@@ -49,7 +51,17 @@ is removed before indexing. Positions are kept for phrase search. The index is r
 transaction; the server picks up a new index without a restart.
 
 **Ranking.** BM25F over the five fields, then: term proximity (query words close together),
-title coverage, exact-phrase-in-title, a gentle PageRank nudge, and homepage boost for site names.
+title coverage, exact-phrase-in-title, a gentle PageRank nudge, and:
+- *navigational intent*: a query that names a site ("nova legal", "replay.gg", "node.js") lifts that
+  site's homepage, then the rest of the site;
+- *site authority*: how many other sites link to the site (log scale, small weight);
+- shallow URLs over deep ones; non-English pages lower for Latin-script queries (English-first beta);
+  login / cookie / terms / 404 pages lower unless asked for; generic anchors ("click here") ignored.
+
+**Measuring ranking.** `tools/relevance.json` holds judged queries (query -> URLs that count as
+correct). `node tools/eval.js --baseline tools/baseline/search-v0.1.js` scores the current ranker
+against the first beta ranker on the same index (MRR@10, P@1, S@3). Add queries there whenever a
+search looks wrong, then change ranking until the number goes up without other queries going down.
 At most two results per host in a row. Supports `"phrases"`, `-exclude`, `site:example.com`,
 "did you mean" (edit distance over the index's own vocabulary) and autocomplete.
 

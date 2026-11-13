@@ -1,0 +1,295 @@
+{
+  "_comment": "Judged queries for tools/eval.js. `relevant` = regexes over result URLs that count as a correct answer. Navigational queries have one right answer; informational ones list every good page. Judgments written 2026-11-13 by Claude; Brandon can add more. 2026-11-13: widened 3 judgments (node.js /learn without /en, Nova /privacy, W3Schools Python) after seeing real index contents; applied to both rankers.",
+  "queries": [
+    {
+      "q": "vexa",
+      "type": "nav",
+      "relevant": [
+        "^https://vexa\\.shadylabs\\.workers\\.dev/$"
+      ]
+    },
+    {
+      "q": "vexa browser download",
+      "type": "nav",
+      "relevant": [
+        "^https://vexa\\.shadylabs\\.workers\\.dev/$"
+      ]
+    },
+    {
+      "q": "vexabot",
+      "type": "nav",
+      "relevant": [
+        "^https://vexa\\.shadylabs\\.workers\\.dev/bot$"
+      ]
+    },
+    {
+      "q": "block vexabot robots.txt",
+      "type": "nav",
+      "relevant": [
+        "^https://vexa\\.shadylabs\\.workers\\.dev/bot$"
+      ]
+    },
+    {
+      "q": "nova legal",
+      "type": "nav",
+      "relevant": [
+        "^https://nova-legal\\.shadylabs\\.workers\\.dev/"
+      ]
+    },
+    {
+      "q": "replay.gg",
+      "type": "nav",
+      "relevant": [
+        "^https://replay-gg-site\\.shadylabs\\.workers\\.dev/$"
+      ]
+    },
+    {
+      "q": "replay gg clip recorder",
+      "type": "nav",
+      "relevant": [
+        "^https://replay-gg-site\\.shadylabs\\.workers\\.dev/"
+      ]
+    },
+    {
+      "q": "atlas desktop assistant",
+      "type": "nav",
+      "relevant": [
+        "^https://atlas-website\\.shadylabs\\.workers\\.dev/"
+      ]
+    },
+    {
+      "q": "nova cut video editor",
+      "type": "nav",
+      "relevant": [
+        "^https://nova-cut-site\\.shadylabs\\.workers\\.dev/"
+      ]
+    },
+    {
+      "q": "nova help support",
+      "type": "nav",
+      "relevant": [
+        "^https://nova-help\\.shadylabs\\.workers\\.dev/"
+      ]
+    },
+    {
+      "q": "nova review",
+      "type": "nav",
+      "relevant": [
+        "^https://nova-review\\.shadylabs\\.workers\\.dev/"
+      ]
+    },
+    {
+      "q": "python",
+      "type": "nav",
+      "relevant": [
+        "^https://www\\.python\\.org/$"
+      ]
+    },
+    {
+      "q": "rust programming language",
+      "type": "nav",
+      "relevant": [
+        "^https://(www\\.)?rust-lang\\.org/$"
+      ]
+    },
+    {
+      "q": "nasa",
+      "type": "nav",
+      "relevant": [
+        "^https://www\\.nasa\\.gov/$"
+      ]
+    },
+    {
+      "q": "bbc news",
+      "type": "nav",
+      "relevant": [
+        "^https://www\\.bbc\\.(com|co\\.uk)/news/?$"
+      ]
+    },
+    {
+      "q": "pc gamer",
+      "type": "nav",
+      "relevant": [
+        "^https://www\\.pcgamer\\.com/$"
+      ]
+    },
+    {
+      "q": "polygon gaming news",
+      "type": "nav",
+      "relevant": [
+        "^https://www\\.polygon\\.com/$"
+      ]
+    },
+    {
+      "q": "mdn web docs",
+      "type": "nav",
+      "relevant": [
+        "^https://developer\\.mozilla\\.org/en-US/(docs/Web/?)?$"
+      ]
+    },
+    {
+      "q": "node.js",
+      "type": "nav",
+      "relevant": [
+        "^https://nodejs.org/(en/?)?$",
+        "^https://nodejs.org/(en/)?(learn|about)"
+      ]
+    },
+    {
+      "q": "wikipedia",
+      "type": "nav",
+      "relevant": [
+        "^https://en\\.wikipedia\\.org/wiki/Main_Page$",
+        "^https://en\\.wikipedia\\.org/wiki/Wikipedia$"
+      ]
+    },
+    {
+      "q": "video game",
+      "type": "info",
+      "relevant": [
+        "wikipedia\\.org/wiki/Video_game$"
+      ]
+    },
+    {
+      "q": "video game history",
+      "type": "info",
+      "relevant": [
+        "wikipedia\\.org/wiki/(Video_game|History_of_video_games)"
+      ]
+    },
+    {
+      "q": "css grid layout",
+      "type": "info",
+      "relevant": [
+        "developer\\.mozilla\\.org/.*[Gg]rid",
+        "css-grid"
+      ]
+    },
+    {
+      "q": "javascript array methods",
+      "type": "info",
+      "relevant": [
+        "developer\\.mozilla\\.org/.*Array"
+      ]
+    },
+    {
+      "q": "html attributes reference",
+      "type": "info",
+      "relevant": [
+        "developer\\.mozilla\\.org/.*HTML/Reference/Attributes"
+      ]
+    },
+    {
+      "q": "svg tutorial",
+      "type": "info",
+      "relevant": [
+        "developer\\.mozilla\\.org/.*SVG",
+        "svg-tutorial"
+      ]
+    },
+    {
+      "q": "python tutorial",
+      "type": "info",
+      "relevant": [
+        "docs.python.org/3/tutorial",
+        "python.org/about/gettingstarted",
+        "python.org/doc",
+        "w3schools.com/python"
+      ]
+    },
+    {
+      "q": "rust ownership borrowing",
+      "type": "info",
+      "relevant": [
+        "doc\\.rust-lang\\.org/book/.*ownership",
+        "doc\\.rust-lang\\.org/book/ch04"
+      ]
+    },
+    {
+      "q": "download node.js",
+      "type": "info",
+      "relevant": [
+        "nodejs\\.org/en/download"
+      ]
+    },
+    {
+      "q": "james webb space telescope",
+      "type": "info",
+      "relevant": [
+        "nasa\\.gov/.*webb",
+        "wikipedia\\.org/wiki/James_Webb"
+      ]
+    },
+    {
+      "q": "hubble telescope images",
+      "type": "info",
+      "relevant": [
+        "nasa\\.gov/.*(hubble|image)"
+      ]
+    },
+    {
+      "q": "git documentation",
+      "type": "info",
+      "relevant": [
+        "git-scm\\.com/doc"
+      ]
+    },
+    {
+      "q": "typescript handbook",
+      "type": "info",
+      "relevant": [
+        "typescriptlang\\.org/docs"
+      ]
+    },
+    {
+      "q": "react learn",
+      "type": "info",
+      "relevant": [
+        "react\\.dev/learn"
+      ]
+    },
+    {
+      "q": "web performance core web vitals",
+      "type": "info",
+      "relevant": [
+        "web\\.dev/.*(vitals|performance|lcp|inp|cls)"
+      ]
+    },
+    {
+      "q": "privacy policy nova",
+      "type": "info",
+      "relevant": [
+        "nova-legal.shadylabs.workers.dev/",
+        "^https://nova-780.pages.dev/privacy"
+      ]
+    },
+    {
+      "q": "minecraft",
+      "type": "nav",
+      "relevant": [
+        "^https://www\\.minecraft\\.net/"
+      ]
+    },
+    {
+      "q": "nintendo switch",
+      "type": "info",
+      "relevant": [
+        "nintendo\\.com/"
+      ]
+    },
+    {
+      "q": "european space agency",
+      "type": "nav",
+      "relevant": [
+        "^https://www\\.esa\\.int/"
+      ]
+    },
+    {
+      "q": "smithsonian magazine",
+      "type": "nav",
+      "relevant": [
+        "^https://www\\.smithsonianmag\\.com/"
+      ]
+    }
+  ]
+}

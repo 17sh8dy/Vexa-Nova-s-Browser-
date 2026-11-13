@@ -63,8 +63,17 @@ async function main() {
     const added = crawler.addSeeds(seeds);
     console.log(`VexaBot ${USER_AGENT}\n${added} seed(s) queued. Ctrl+C stops after in-flight pages finish.\n`);
     const ac = new AbortController();
+    const t0 = Date.now();
+    const tick = setInterval(() => console.log(`[progress] ${Math.round((Date.now() - t0) / 1000)}s fetched=${crawler.stats.fetched} indexed=${crawler.stats.indexed} rss=${Math.round(process.memoryUsage().rss / 1048576)}MB`), 60000);
+    for (const sig of ['SIGHUP', 'SIGBREAK', 'SIGTERM']) {
+      process.on(sig, () => { console.log(`[signal] ${sig}: stopping cleanly`); ac.abort(); });
+    }
+    process.on('exit', (code) => console.log(`[exit] code=${code} after ${Math.round((Date.now() - t0) / 1000)}s`));
+    process.on('uncaughtException', (e) => { console.log('[uncaught]', e && e.stack); process.exit(70); });
+    process.on('unhandledRejection', (e) => { console.log('[unhandled rejection]', e && e.stack); });
     process.once('SIGINT', () => { console.log('\nStopping…'); ac.abort(); });
     const stats = await crawler.run({ maxPages: num(args.max, config.crawl.maxPages), signal: ac.signal });
+    clearInterval(tick);
     console.log('\nCrawl finished:', stats);
     if (args.index) console.log('Index built:', buildIndex(db));
   } else if (cmd === 'index') {

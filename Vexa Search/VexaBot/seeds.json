@@ -1,6 +1,51 @@
 {
-  "_comment": "Beta seed list. Higher priority crawls first. Categories match the beta coverage plan: technology, gaming, entertainment, education, news, reference. Removed (answer 403 to unknown crawlers, 2026-11-13): apnews.com, ign.com, gamespot.com, theguardian.com, eurogamer.net, rockpapershotgun.com.",
+  "_comment": "Beta seed list. Higher priority crawls first. category 'nova' = Brandon's own sites (always first). Categories match the beta coverage plan: technology, gaming, entertainment, education, news, reference. Removed (answer 403 to unknown crawlers, 2026-11-13): apnews.com, ign.com, gamespot.com, theguardian.com, eurogamer.net, rockpapershotgun.com.",
   "seeds": [
+    {
+      "url": "https://nova-780.pages.dev/",
+      "category": "nova",
+      "priority": 12
+    },
+    {
+      "url": "https://nova-legal.shadylabs.workers.dev/",
+      "category": "nova",
+      "priority": 12
+    },
+    {
+      "url": "https://nova-help.shadylabs.workers.dev/",
+      "category": "nova",
+      "priority": 12
+    },
+    {
+      "url": "https://nova-review.shadylabs.workers.dev/",
+      "category": "nova",
+      "priority": 12
+    },
+    {
+      "url": "https://replay-gg-site.shadylabs.workers.dev/",
+      "category": "nova",
+      "priority": 12
+    },
+    {
+      "url": "https://vexa.shadylabs.workers.dev/",
+      "category": "nova",
+      "priority": 12
+    },
+    {
+      "url": "https://vexa.shadylabs.workers.dev/bot",
+      "category": "nova",
+      "priority": 12
+    },
+    {
+      "url": "https://atlas-website.shadylabs.workers.dev/",
+      "category": "nova",
+      "priority": 12
+    },
+    {
+      "url": "https://nova-cut-site.shadylabs.workers.dev/",
+      "category": "nova",
+      "priority": 12
+    },
     {
       "url": "https://en.wikipedia.org/wiki/Main_Page",
       "category": "reference",
@@ -95,6 +140,151 @@
       "url": "https://en.wikipedia.org/wiki/Video_game",
       "category": "gaming",
       "priority": 6
+    },
+    {
+      "url": "https://docs.python.org/3/",
+      "category": "technology",
+      "priority": 7
+    },
+    {
+      "url": "https://doc.rust-lang.org/book/",
+      "category": "technology",
+      "priority": 6
+    },
+    {
+      "url": "https://web.dev/",
+      "category": "technology",
+      "priority": 6
+    },
+    {
+      "url": "https://go.dev/doc/",
+      "category": "technology",
+      "priority": 5
+    },
+    {
+      "url": "https://www.typescriptlang.org/docs/",
+      "category": "technology",
+      "priority": 5
+    },
+    {
+      "url": "https://react.dev/learn",
+      "category": "technology",
+      "priority": 5
+    },
+    {
+      "url": "https://git-scm.com/doc",
+      "category": "technology",
+      "priority": 5
+    },
+    {
+      "url": "https://www.kernel.org/",
+      "category": "technology",
+      "priority": 4
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Portal:Science",
+      "category": "reference",
+      "priority": 7
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Portal:Technology",
+      "category": "reference",
+      "priority": 7
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Portal:History",
+      "category": "reference",
+      "priority": 6
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Portal:Video_games",
+      "category": "gaming",
+      "priority": 6
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Portal:Film",
+      "category": "entertainment",
+      "priority": 6
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Portal:Music",
+      "category": "entertainment",
+      "priority": 6
+    },
+    {
+      "url": "https://www.britannica.com/",
+      "category": "reference",
+      "priority": 5
+    },
+    {
+      "url": "https://www.smithsonianmag.com/",
+      "category": "education",
+      "priority": 5
+    },
+    {
+      "url": "https://www.esa.int/",
+      "category": "education",
+      "priority": 5
+    },
+    {
+      "url": "https://www.noaa.gov/",
+      "category": "education",
+      "priority": 4
+    },
+    {
+      "url": "https://www.cdc.gov/",
+      "category": "education",
+      "priority": 4
+    },
+    {
+      "url": "https://www.nintendo.com/us/",
+      "category": "gaming",
+      "priority": 5
+    },
+    {
+      "url": "https://store.steampowered.com/about/",
+      "category": "gaming",
+      "priority": 4
+    },
+    {
+      "url": "https://www.playstation.com/en-us/",
+      "category": "gaming",
+      "priority": 4
+    },
+    {
+      "url": "https://www.xbox.com/en-US/",
+      "category": "gaming",
+      "priority": 4
+    },
+    {
+      "url": "https://www.minecraft.net/en-us",
+      "category": "gaming",
+      "priority": 4
+    },
+    {
+      "url": "https://www.reuters.com/",
+      "category": "news",
+      "priority": 5
+    },
+    {
+      "url": "https://www.aljazeera.com/",
+      "category": "news",
+      "priority": 5
+    },
+    {
+      "url": "https://www.cbsnews.com/",
+      "category": "news",
+      "priority": 4
+    },
+    {
+      "url": "https://www.bbc.co.uk/food",
+      "category": "entertainment",
+      "priority": 4
+    },
+    {
+      "url": "https://www.allrecipes.com/",
+      "category": "entertainment",
+      "priority": 3
     }
   ]
 }

@@ -10,6 +10,7 @@ module.exports = {
     maxPages: 500,         // stop after this many successful fetches in one run
     maxDepth: 3,           // link hops from a seed
     maxPerSite: 150,       // per registrable domain; keeps the crawl broad
+    maxQueuedPerSite: 600, // frontier bound per site (seeds exempt)
     concurrency: 4,        // parallel fetches (always on different hosts)
     minHostDelayMs: 1500,  // politeness floor between hits to one host
     maxCrawlDelayMs: 30000,// ignore robots Crawl-delay above this (we just skip the host)
