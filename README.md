@@ -216,4 +216,33 @@ What remains, honestly:
 * **Location:** works once you paste a Google API key (with the Geolocation API enabled) in Settings → Site permissions and restart. Without one, sites can't get a position.
 * **Third-party cookie blocking** now uses the full Public Suffix List, but still works at the network level: third-party iframes can read/write `document.cookie` within their own frame.
 * **Clear browsing data:** the time range applies to history and the download list. Chromium can't clear cookies, site data or the cache by time range, so those are only cleared for *All time* (with a range chosen they're skipped, not over-deleted).
-* **Testing:** the automated suites pass on Windows 11 (unit tests and 32 end-to-end checks). Installer builds (`npm run dist:win`) were not rebuilt or run as part of this change.
+* **Updates:** Vexa has **no auto-update and no update check** (`"publish": null`, no updater code). Users only get a new version by downloading it from https://vexa.shadylabs.workers.dev, and nothing in the app tells them one exists yet. See *Roadmap*.
+* **Testing:** the automated suites pass on Windows 11 (unit tests and 33 end-to-end checks, including Vexa Search). The 0.5.5 installers were built and the packaged app was driven end to end.
+
+---
+
+## Roadmap
+
+### Getting users onto the newest version (not built yet)
+
+Pick one. Option A is the minimum and should ship first; Option B can follow.
+
+**A. Link to the website in Settings → About (minimum).**
+A "Get the newest version" link in Settings → About (next to the version number) that opens
+https://vexa.shadylabs.workers.dev/#download in a new tab. No background network request, so the
+privacy model and NovaLegal's Vexa Terms ("no update check") stay true as written.
+
+**B. Auto-updates, the usual Electron way.**
+`electron-updater` with GitHub Releases as the feed (`publish: { provider: "github" }`, which makes
+`npm run dist` produce `latest.yml`), checking on startup and offering *Restart to update*. Before
+building it:
+* Only the **NSIS installer** can self-update. The **portable** build can't, so it still needs the
+  website link from option A.
+* Installers are **not code-signed**, so Windows SmartScreen will still warn, and an updater should
+  verify what it downloads (electron-updater checks the sha512 in `latest.yml`; Atlas's updater, which
+  also signs its manifest, is a model to copy).
+* Each update would download the whole app (~174 MB), mostly the bundled Vexa Search index. Moving the
+  index to its own download, or relying on blockmap differential updates, keeps updates small.
+* An update check contacts GitHub, so it is a **new network request**: add a setting to turn it off,
+  and update NovaLegal (Vexa Terms "Your data stays on your computer" says *no update check*, plus the
+  Vexa entry in `data/products.js`) **before** release.
