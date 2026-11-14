@@ -26,7 +26,8 @@ const { autofill } = require('./autofill');
 const FILE = 'vexa-sync.json';
 const SYNC_SETTING_KEYS = [
   'theme', 'searchEngine', 'homeMode', 'homeUrl', 'showHomeButton', 'showBookmarksBar', 'startup',
-  'blockThirdPartyCookies', 'doNotTrack', 'suggestions', 'permissionDefaults', 'clearOnExit', 'offerToSavePasswords'
+  'blockThirdPartyCookies', 'doNotTrack', 'suggestions', 'permissionDefaults', 'clearOnExit', 'offerToSavePasswords',
+  'shields', 'shieldsSites', 'newTab'
 ];
 const INTERVAL = 5 * 60 * 1000;
 const DEBOUNCE = 20 * 1000;

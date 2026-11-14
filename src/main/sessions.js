@@ -10,8 +10,10 @@ const { settings } = require('./settings');
 const { downloads } = require('./downloads');
 const { siteOf, hostOf, originOf, INTERNAL_PAGES } = require('./url');
 const vexaSearch = require('./vexa-search');
+const { shields } = require('./shields');
 
 const PAGES_DIR = path.join(__dirname, '..', 'pages');
+const PAGE_PRELOAD = path.join(__dirname, '..', 'preload', 'internal.js');
 const RENDERER_SHARED = path.join(__dirname, '..', 'renderer', 'shared');
 
 // Permissions that are granted without asking (they're user-initiated or harmless).
@@ -62,6 +64,8 @@ function registerProtocol(ses, isPrivate = false) {
     const host = url.hostname;
     // Vexa Search (beta) has its own handler and is not a privileged page.
     if (host === 'search') return vexaSearch.handleRequest(request.url);
+    // The user's own New Tab wallpapers: image bytes from the profile, same origin as the page.
+    if (host === 'newtab' && url.pathname.startsWith('/uploads/')) return require('./wallpapers').wallpapers.serve(url.pathname.slice('/uploads/'.length));
     if (!INTERNAL_PAGES.includes(host) && host !== 'shared') {
       return new Response(`<!doctype html><meta charset=utf-8><title>Not found</title><body style="font-family:system-ui;padding:40px">vexa://${host} doesn't exist.`, {
         status: 404,
@@ -109,9 +113,8 @@ function topLevelUrl(details) {
   return details.referrer || '';
 }
 
-function isThirdParty(details) {
+function isThirdParty(details, top = topLevelUrl(details)) {
   if (details.resourceType === 'mainFrame') return false;
-  const top = topLevelUrl(details);
   if (!/^https?:/i.test(top)) return false;
   const reqSite = siteOf(hostOf(details.url));
   const topSite = siteOf(hostOf(top));
@@ -121,13 +124,25 @@ function isThirdParty(details) {
 function configureWebRequest(ses) {
   const filter = { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] };
 
+  // Vexa Shields: block ads/trackers/dangerous hosts, remove tracking parameters, upgrade to HTTPS.
+  ses.webRequest.onBeforeRequest(filter, (details, callback) => {
+    try {
+      callback(shields.beforeRequest(details, ses, details.resourceType === 'mainFrame' ? '' : topLevelUrl(details)));
+    } catch (err) {
+      console.error('[vexa] shields:', err.message);
+      callback({});
+    }
+  });
+
   ses.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
     const headers = details.requestHeaders;
     if (settings.get('doNotTrack')) {
       headers.DNT = '1';
       headers['Sec-GPC'] = '1';
     }
-    if (settings.get('blockThirdPartyCookies') && isThirdParty(details)) {
+    const top = details.resourceType === 'mainFrame' ? '' : topLevelUrl(details);
+    if (isThirdParty(details, top) && shields.blocksCookies(top, ses)) {
+      if (headers.Cookie || headers.cookie) shields.count(details.webContentsId, 'cookies');
       delete headers.Cookie;
       delete headers.cookie;
     }
@@ -139,14 +154,18 @@ function configureWebRequest(ses) {
   });
 
   ses.webRequest.onHeadersReceived(filter, (details, callback) => {
-    if (!settings.get('blockThirdPartyCookies') || !details.responseHeaders || !isThirdParty(details)) {
+    const top = details.resourceType === 'mainFrame' ? '' : topLevelUrl(details);
+    if (!details.responseHeaders || !isThirdParty(details, top) || !shields.blocksCookies(top, ses)) {
       callback({});
       return;
     }
     const responseHeaders = {};
+    let dropped = false;
     for (const [k, v] of Object.entries(details.responseHeaders)) {
       if (k.toLowerCase() !== 'set-cookie') responseHeaders[k] = v;
+      else dropped = true;
     }
+    if (dropped) shields.count(details.webContentsId, 'cookies');
     callback({ responseHeaders });
   });
 }
@@ -204,6 +223,12 @@ function configurePermissions(ses, isPrivate) {
 function configureSession(ses, { isPrivate = false } = {}) {
   if (configured.has(ses)) return ses;
   configured.add(ses);
+  if (isPrivate) shields.markPrivate(ses);
+  // Vexa's page preload (vexa:// page API, password manager, Shields fingerprinting glue).
+  // Registered on the session rather than per tab, so it also runs in tabs that a page
+  // opened itself (target=_blank, window.open): those are created before Vexa can set
+  // their preferences. Never for the browser's own file:// UI.
+  ses.registerPreloadScript({ type: 'frame', id: 'vexa-page', filePath: PAGE_PRELOAD, matches: ['http://*/*', 'https://*/*', 'vexa://*/*'] });
   ses.setUserAgent(cleanUserAgent());
   registerProtocol(ses, isPrivate);
   configureWebRequest(ses);

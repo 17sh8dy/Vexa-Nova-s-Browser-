@@ -83,6 +83,8 @@
       // Keep DOM order in sync without re-creating nodes.
       if (tabsEl.children[index] !== el) tabsEl.insertBefore(el, tabsEl.children[index] || null);
       el.classList.toggle('active', t.id === state.activeId);
+      el.classList.toggle('pinned', !!t.pinned);
+      el.classList.toggle('pin-edge', !!t.pinned && !(state.tabs[index + 1] && state.tabs[index + 1].pinned));
       el.setAttribute('aria-selected', t.id === state.activeId);
       el.title = t.title + (t.url && !t.isNewTab ? '\n' + t.url : '');
       const iconKey = `${t.loading && !t.pending}|${!!(t.crashed || t.error)}|${t.internal}|${t.favicon}`;
@@ -121,7 +123,7 @@
   }
 
   function updateNarrow() {
-    for (const el of tabEls.values()) el.classList.toggle('narrow', el.getBoundingClientRect().width < 72);
+    for (const el of tabEls.values()) el.classList.toggle('narrow', !el.classList.contains('pinned') && el.getBoundingClientRect().width < 72);
   }
   new ResizeObserver(updateNarrow).observe(tabsEl);
 
@@ -238,13 +240,14 @@
   }
   $('#menu-btn').addEventListener('click', () => cmd('popup', { kind: 'menu', anchor: anchorOf($('#menu-btn')) }));
   $('#downloads-btn').addEventListener('click', () => cmd('popup', { kind: 'downloads', anchor: anchorOf($('#downloads-btn')) }));
+  $('#shields-btn').addEventListener('click', () => cmd('popup', { kind: 'shields', anchor: anchorOf($('#shields-btn')) }));
 
   // Clicking anywhere in the chrome (outside the omnibox) dismisses an open popup.
   document.addEventListener(
     'pointerdown',
     (e) => {
       if (!state || !state.popup) return;
-      if (e.target.closest('#menu-btn') || e.target.closest('#downloads-btn')) return; // toggles handle it
+      if (e.target.closest('#menu-btn') || e.target.closest('#downloads-btn') || e.target.closest('#shields-btn')) return; // toggles handle it
       if (state.popup === 'suggestions' && e.target.closest('#omnibox')) return;
       cmd('popup-hide');
     },
@@ -328,7 +331,13 @@
   function setAddressFromTab(force = false) {
     const t = activeTab();
     if (omni.focused && omni.editing && !force) return;
-    address.value = displayFor(t);
+    const next = displayFor(t);
+    if (address.value !== next) {
+      address.value = next;
+      // Focused but not typing yet: keep the whole address selected, so what the user
+      // types replaces it instead of being appended to it.
+      if (omni.focused) address.select();
+    }
     address.placeholder = `Search ${state ? state.settings.searchEngineName : ''} or type a URL`;
     renderUrlDisplay(t);
   }
@@ -623,8 +632,11 @@
     findbar.hidden = !open;
     if (!open) return;
     if (findTabId !== t.id) {
+      // The find bar opens before its first state arrives; don't wipe what the user
+      // already typed into it.
+      const typing = document.activeElement === findInput && findInput.value && !f.text;
       findTabId = t.id;
-      findInput.value = f.text || '';
+      if (!typing) findInput.value = f.text || '';
     }
     if (!findInput.value) {
       findCount.textContent = '';
@@ -693,6 +705,22 @@
     let title;
     let desc;
     let code;
+    const dangerous = !!(t.error && t.error.code === 'malicious');
+    panel.classList.toggle('danger', dangerous);
+    $('#panel-proceed').hidden = !dangerous;
+    if (dangerous) {
+      $('.panel-mark').innerHTML = I.danger.replace('width="18" height="18"', 'width="56" height="56"');
+      $('#panel-title').textContent = 'Vexa Shields stopped a dangerous site';
+      $('#panel-desc').innerHTML = `<b>${host}</b> is on Vexa's list of phishing and scam sites. Sites like this try to steal passwords, payment details or money. Vexa didn't load it, so nothing on it has run.`;
+      $('#panel-code').textContent = 'VEXA_SHIELDS_DANGEROUS_SITE';
+      $('#panel-back').hidden = false;
+      $('#panel-back').textContent = t.canGoBack ? 'Back to safety' : 'Open a New Tab';
+      $('#panel-back').classList.add('primary');
+      $('#panel-retry').hidden = true;
+      return;
+    }
+    if (!$('.panel-mark').querySelector('defs')) $('.panel-mark').innerHTML = window.VexaMark(56);
+    $('#panel-back').textContent = 'Go back';
     if (t.crashed) {
       title = 'This tab stopped working';
       desc = t.crashed === 'oom' ? 'The page ran out of memory.' : 'Something went wrong while displaying this page.';
@@ -723,7 +751,12 @@
     $('#panel-retry').classList.toggle('primary', !isCert);
   }
   $('#panel-retry').addEventListener('click', () => cmd('action', { action: 'reload' }));
-  $('#panel-back').addEventListener('click', () => cmd('action', { action: 'back' }));
+  $('#panel-back').addEventListener('click', () => {
+    const t = activeTab();
+    if (t && t.error && t.error.code === 'malicious' && !t.canGoBack) cmd('navigate', { input: 'vexa://newtab/' });
+    else cmd('action', { action: 'back' });
+  });
+  $('#panel-proceed').addEventListener('click', () => cmd('shields-proceed'));
 
   // ------------------------------------------------------------------ downloads button
   const dlBtn = $('#downloads-btn');
@@ -751,7 +784,28 @@
   api.on('popup-closed', () => {
     $('#menu-btn').classList.remove('open');
     dlBtn.classList.remove('open');
+    $('#shields-btn').classList.remove('open');
   });
+
+  // ------------------------------------------------------------------ Vexa Shields button
+  const shBtn = $('#shields-btn');
+  function renderShields(t) {
+    const sh = t && t.shields;
+    shBtn.hidden = !sh;
+    if (!sh) return;
+    const key = sh.enabled ? 'on' : 'off';
+    if (shBtn._k !== key) {
+      shBtn._k = key;
+      shBtn.querySelector('.sh-icon').innerHTML = sh.enabled ? I.vexaShield : I.vexaShieldOff;
+    }
+    shBtn.classList.toggle('down', !sh.enabled);
+    const badge = shBtn.querySelector('.sh-badge');
+    const n = sh.enabled ? sh.count : 0;
+    badge.hidden = !n;
+    badge.textContent = n > 99 ? '99+' : String(n);
+    shBtn.title = sh.enabled ? (n ? `Vexa Shields: ${n} blocked on this page` : 'Vexa Shields: protecting this site') : 'Vexa Shields are down for this site';
+    shBtn.classList.toggle('open', state.popup === 'shields');
+  }
 
   // ------------------------------------------------------------------ state
   function render() {
@@ -798,6 +852,7 @@
     renderFind(t);
     renderPanel(t);
     renderDownloads();
+    renderShields(t);
     $('#menu-btn').classList.toggle('open', state.popup === 'menu');
     dlBtn.classList.toggle('open', state.popup === 'downloads');
     lastActiveId = state.activeId;

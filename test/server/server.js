@@ -7,6 +7,7 @@ const page = (title, body, head = '') =>
 
 const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#22c55e"/></svg>';
 const cookieLog = [];
+const hitLog = []; // Vexa Shields test: which embedded third-party hosts actually reached the server
 
 function handler(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -14,7 +15,30 @@ function handler(req, res) {
     res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', ...headers });
     res.end(body);
   };
+  const port = (req.headers.host || '').split(':')[1] || '';
   switch (url.pathname) {
+    // Vexa Shields: a page embedding an ad network, a tracker and an ordinary third party
+    // (the hostnames are mapped to this server by --host-resolver-rules in the e2e run),
+    // opening a window without a click, and reading a canvas.
+    case '/shields':
+      return send(200, 'text/html', page('Shields test', `<h1>Shields</h1>
+        <img src="http://ads.doubleclick.net:${port}/__px?n=ad">
+        <img src="http://b.scorecardresearch.com:${port}/__px?n=tracker">
+        <img src="http://static.vexa-e2e-cdn.net:${port}/__px?n=ok">
+        <canvas id="c" width="16" height="16"></canvas>
+        <p id="fp"></p>
+        <script>
+          setTimeout(() => window.open('/page2'), 200);
+          const c = document.getElementById('c'), x = c.getContext('2d');
+          x.fillStyle = '#fff'; x.fillRect(0, 0, 16, 16);
+          const d = x.getImageData(0, 0, 16, 16).data;
+          document.getElementById('fp').textContent = Array.prototype.every.call(d, (v) => v === 255) ? 'untouched' : 'farbled';
+        </script>`));
+    case '/__px':
+      hitLog.push(`${(req.headers.host || '').split(':')[0]}|${url.searchParams.get('n')}`);
+      return send(200, 'image/svg+xml', FAVICON);
+    case '/__hits':
+      return send(200, 'application/json', JSON.stringify(hitLog.splice(0)));
     case '/':
       return send(200, 'text/html', page('Vexa Test Home', `<h1>Test home</h1>
         <p>Find target: needle needle needle</p>

@@ -49,7 +49,65 @@
     if (document.activeElement !== $('#home-url')) $('#home-url').value = s.homeUrl || '';
     renderPermDefaults();
     renderPermSites();
+    renderShields();
   }
+
+  // ------------------------------------------------------------------ Vexa Shields
+  const SHIELDS = [
+    ['ads', 'Block third-party ads', 'Stops ad networks loading on the sites you visit. Ads a site serves itself are not affected.', I.target],
+    ['trackers', 'Block trackers', 'Stops analytics and tracking services that follow you from site to site.', I.target],
+    ['cookies', 'Block cross-site cookies', 'Other sites embedded in a page can\'t read or set cookies. Some embedded sign-ins may stop working.', I.cookie],
+    ['fingerprinting', 'Fingerprinting protection', 'Gives sites slightly different canvas, graphics and audio readings in every session, so they can\'t be used to recognise you.', I.fingerprint],
+    ['https', 'Upgrade connections to HTTPS', 'Tries the secure version of a site first and falls back to http:// only when there isn\'t one.', I.lockUp],
+    ['malicious', 'Dangerous-site protection', 'Warns you before opening a site on Vexa\'s built-in list of phishing and scam sites.', I.danger.replace('width="18" height="18"', 'width="16" height="16"')],
+    ['params', 'Remove tracking parameters', 'Strips click-tracking codes such as utm_source and fbclid from the links you open.', I.popup],
+    ['popups', 'Block intrusive popups', 'Windows a site tries to open without you clicking are blocked.', I.popup]
+  ];
+  const SHIELD_NAMES = Object.fromEntries(SHIELDS.map(([k, n]) => [k, n]));
+
+  function renderShields() {
+    if (!s.shields) return;
+    $('#shields-defaults').innerHTML = SHIELDS.map(
+      ([key, name, desc]) => `<div class="row"><div class="label"><b>${esc(name)}</b><small>${esc(desc)}</small></div><label class="switch"><input type="checkbox" data-shield="${key}" ${s.shields[key] ? 'checked' : ''} /><span></span></label></div>`
+    ).join('');
+    const sites = Object.entries(s.shieldsSites || {}).sort(([a], [b]) => a.localeCompare(b));
+    if (!sites.length) {
+      $('#shields-sites').innerHTML = '<div class="row empty-row"><div class="label"><small>No sites yet. When you change Shields for a site, it shows up here.</small></div></div>';
+      return;
+    }
+    $('#shields-sites').innerHTML =
+      sites
+        .map(([site, o]) => {
+          const parts = [];
+          if (o.enabled === false) parts.push('Shields down');
+          for (const [k, v] of Object.entries(o)) if (k !== 'enabled') parts.push(`${SHIELD_NAMES[k] || k}: ${v ? 'on' : 'off'}`);
+          return `<div class="row"><div class="label"><b>${esc(site)}</b><small>${esc(parts.join(' · '))}</small></div><button class="btn small" data-reset-site="${esc(site)}">Reset</button></div>`;
+        })
+        .join('') + '<div class="row"><div class="label"></div><button class="btn small danger" id="shields-reset-all">Reset all sites</button></div>';
+  }
+
+  $('#shields-defaults').addEventListener('change', async (e) => {
+    const box = e.target.closest('[data-shield]');
+    if (!box) return;
+    try {
+      s.shields = await call('settings.set', 'shields', { [box.dataset.shield]: box.checked });
+    } catch (err) {
+      toast('Could not save: ' + err.message);
+    }
+  });
+  $('#shields-sites').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-reset-site]');
+    if (b) {
+      await call('shields.resetSite', b.dataset.resetSite);
+      toast(`Shields for ${b.dataset.resetSite} are back to your defaults`);
+    } else if (e.target.closest('#shields-reset-all')) {
+      await call('shields.resetAllSites');
+      toast('Every site is back to your Shields defaults');
+    }
+    s = await call('settings.get');
+    renderShields();
+  });
+
 
   async function set(key, value) {
     try {

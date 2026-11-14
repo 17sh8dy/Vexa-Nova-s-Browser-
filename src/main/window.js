@@ -7,7 +7,8 @@ const { settings } = require('./settings');
 const { history } = require('./history');
 const { bookmarks, ROOTS } = require('./bookmarks');
 const { downloads } = require('./downloads');
-const { resolveInput, NEWTAB_URL, SEARCH_ENGINES, displayUrl } = require('./url');
+const { resolveInput, NEWTAB_URL, SEARCH_ENGINES, displayUrl, hostOf, siteOf } = require('./url');
+const { shields } = require('./shields');
 const { actionFor } = require('./shortcuts');
 const { defaultSession, newPrivateSession } = require('./sessions');
 
@@ -272,6 +273,21 @@ class VexaWindow extends EventEmitter {
   }
 
   // ---------------------------------------------------------------- tabs
+  get pinnedCount() {
+    return this.tabs.filter((t) => t.pinned).length;
+  }
+
+  /** Pin or unpin a tab. Pinning moves it to the end of the pinned group; unpinning to just after it. */
+  setPinned(id, pinned) {
+    const tab = this.getTab(id);
+    if (!tab || tab.pinned === !!pinned) return;
+    this.tabs.splice(this.tabs.indexOf(tab), 1);
+    tab.pinned = !!pinned;
+    this.tabs.splice(this.pinnedCount, 0, tab);
+    tab.changed();
+    this.emit('tabs-changed');
+  }
+
   get activeIndex() {
     return this.tabs.indexOf(this.activeTab);
   }
@@ -279,7 +295,10 @@ class VexaWindow extends EventEmitter {
   addTab({ url, restore, lazy = false, activate = true, index, webContents, openerId } = {}) {
     const tab = new Tab(this, { url: url || (restore ? undefined : NEWTAB_URL), restore, lazy, webContents });
     tab.openerId = openerId ?? null;
-    const at = index == null ? this.tabs.length : Math.max(0, Math.min(index, this.tabs.length));
+    let at = index == null ? this.tabs.length : Math.max(0, Math.min(index, this.tabs.length));
+    // Pinned tabs stay together on the left: ordinary tabs never go in front of them.
+    if (tab.pinned) at = Math.min(at, this.pinnedCount);
+    else at = Math.max(at, this.pinnedCount);
     this.tabs.splice(at, 0, tab);
     const { width, height } = this.contentSize();
     const top = Math.round(this.layoutInfo.chromeHeight);
@@ -371,7 +390,11 @@ class VexaWindow extends EventEmitter {
     if (!tab) return;
     const from = this.tabs.indexOf(tab);
     this.tabs.splice(from, 1);
-    this.tabs.splice(Math.max(0, Math.min(index, this.tabs.length)), 0, tab);
+    // A pinned tab moves within the pinned group, an ordinary one only after it.
+    const pinned = this.pinnedCount;
+    const lo = tab.pinned ? 0 : pinned;
+    const hi = tab.pinned ? pinned : this.tabs.length;
+    this.tabs.splice(Math.max(lo, Math.min(index, hi)), 0, tab);
     this.sendState();
     this.emit('tabs-changed');
   }
@@ -404,7 +427,8 @@ class VexaWindow extends EventEmitter {
   receiveTab(tab, index = this.tabs.length) {
     tab.win = this;
     tab.attached = false;
-    const at = Math.max(0, Math.min(index, this.tabs.length));
+    tab.pinned = false; // a tab moved to another window arrives unpinned
+    const at = Math.max(this.pinnedCount, Math.min(index, this.tabs.length));
     this.tabs.splice(at, 0, tab);
     const { width, height } = this.contentSize();
     const top = Math.round(this.layoutInfo.chromeHeight);
@@ -485,16 +509,19 @@ class VexaWindow extends EventEmitter {
   }
 
   closeOtherTabs(id) {
-    for (const t of [...this.tabs]) if (t.id !== id) this.closeTab(t.id);
+    for (const t of [...this.tabs]) if (t.id !== id && !t.pinned) this.closeTab(t.id); // pinned tabs are kept, as in Chrome
   }
 
   closeTabsToRight(id) {
     const i = this.tabs.findIndex((t) => t.id === id);
-    for (const t of this.tabs.slice(i + 1)) this.closeTab(t.id);
+    for (const t of this.tabs.slice(i + 1)) if (!t.pinned) this.closeTab(t.id);
   }
 
   tabChanged(tab) {
-    if (tab === this.activeTab) this.win.setTitle(`${tab.snapshot().title} — Vexa${this.isPrivate ? ' (Private)' : ''}`);
+    if (tab === this.activeTab) {
+      this.win.setTitle(`${tab.snapshot().title} — Vexa${this.isPrivate ? ' (Private)' : ''}`);
+      if (this.popup?.kind === 'shields') this.updatePopup('shields', this.shieldsData());
+    }
     this.sendState();
     this.emit('tabs-changed');
   }
@@ -564,6 +591,46 @@ class VexaWindow extends EventEmitter {
   menuData() {
     const t = this.activeTab;
     return { zoom: t ? t.zoom : 1, isPrivate: this.isPrivate, fullscreen: this.win.isFullScreen(), bookmarksBar: settings.get('showBookmarksBar'), canBookmark: !!t && !t.isNewTab && /^(https?|file):/.test(t.url), bookmarked: !!t && bookmarks.isBookmarked(t.url) };
+  }
+
+  /** What the Vexa Shields panel shows for the active tab. */
+  shieldsData() {
+    const t = this.activeTab;
+    if (!t || !/^https?:/i.test(t.url) || t.wc.isDestroyed()) return { applicable: false };
+    const ses = t.wc.session;
+    const host = hostOf(t.url);
+    const site = siteOf(host);
+    const overrides = shields.siteOverrides(site, ses);
+    return {
+      applicable: true,
+      host,
+      site,
+      isPrivate: this.isPrivate,
+      secure: /^https:/i.test(t.url),
+      protections: shields.forSite(site, ses),
+      defaults: settings.get('shields'),
+      custom: Object.keys(overrides).length > 0,
+      stats: shields.stats(t.wc.id),
+      dangerous: !!(t.error && t.error.code === 'malicious')
+    };
+  }
+
+  /** A Shields change for the active tab's site, then reload so it takes effect. */
+  shieldsCommand(args) {
+    const t = this.activeTab;
+    const data = this.shieldsData();
+    if (!data.applicable) return;
+    const ses = t.wc.session;
+    if (args.op === 'site') shields.setSite(data.site, { enabled: !!args.enabled }, ses);
+    else if (args.op === 'protection' && typeof args.key === 'string') shields.setSite(data.site, { enabled: true, [args.key]: !!args.value }, ses);
+    else if (args.op === 'reset') shields.resetSite(data.site, ses);
+    else if (args.op === 'settings') {
+      this.hidePopup();
+      return this.openInternal('vexa://settings/#shields');
+    } else return;
+    if (!t.error) t.wc.reload();
+    this.updatePopup('shields', this.shieldsData());
+    this.sendState();
   }
 
   downloadsData() {
@@ -781,6 +848,8 @@ class VexaWindow extends EventEmitter {
           tab.changed();
         }
         return;
+      case 'pin-tab':
+        return this.setPinned(args.tabId, args.pinned !== false);
       case 'tab-context':
         return require('./context-menu').showTabMenu(this, tab);
       case 'layout':
@@ -795,6 +864,7 @@ class VexaWindow extends EventEmitter {
         if (this.popup?.kind === args.kind) return this.hidePopup();
         if (args.kind === 'menu') return this.showPopup('menu', this.menuData(), args.anchor);
         if (args.kind === 'downloads') return this.showPopup('downloads', this.downloadsData(), args.anchor);
+        if (args.kind === 'shields') return this.showPopup('shields', this.shieldsData(), args.anchor);
         return;
       case 'popup-hide':
         return this.hidePopup();
@@ -830,6 +900,8 @@ class VexaWindow extends EventEmitter {
         return;
       case 'site-settings':
         return this.openInternal('vexa://settings/#permissions');
+      case 'shields-proceed':
+        return tab && tab.proceedUnsafe();
       default:
         throw new Error(`Unknown command ${name}`);
     }
@@ -847,6 +919,8 @@ class VexaWindow extends EventEmitter {
         if (this.popup?.kind === 'menu') this.updatePopup('menu', this.menuData());
         return;
       }
+      case 'shields':
+        return this.shieldsCommand(args);
       case 'pick-suggestion':
         this.hidePopup();
         this.chrome.send('suggestion-picked');

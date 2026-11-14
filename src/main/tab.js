@@ -7,16 +7,18 @@ const { isInternal, NEWTAB_URL } = require('./url');
 const { actionFor } = require('./shortcuts');
 const { settings } = require('./settings');
 const { passwords } = require('./passwords');
+const { shields } = require('./shields');
 
-const TAB_PRELOAD = path.join(__dirname, '..', 'preload', 'internal.js');
+// Input that counts as the user doing something (Chromium's "user activation").
+const GESTURES = new Set(['mouseDown', 'mouseUp', 'rawKeyDown', 'keyDown', 'touchStart', 'touchEnd', 'gestureTap']);
+
 const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
 
 let nextTabId = 1;
 
 function tabWebPreferences(ses) {
   return {
-    session: ses,
-    preload: TAB_PRELOAD,
+    session: ses, // the page preload is registered on the session (sessions.js), so it also runs in tabs a page opens
     sandbox: true,
     contextIsolation: true,
     nodeIntegration: false,
@@ -47,6 +49,7 @@ class Tab {
     this.title = restore?.title || '';
     this.url = url || restore?.entries?.[restore.index ?? restore.entries.length - 1]?.url || '';
     this.favicon = restore?.favicon || '';
+    this.pinned = !!restore?.pinned; // pinned tabs sit at the left of the strip, icon only
     this.loading = false;
     this.error = null; // { code, description, url }
     this.crashed = null;
@@ -56,6 +59,7 @@ class Tab {
     this.passwordPrompt = null; // { id, origin, username, password, update, navs }
     this.find = { active: false, text: '', matches: 0, ordinal: 0 };
     this.htmlFullscreen = false;
+    this.lastGesture = 0; // when the user last clicked / typed in this tab (popup blocking)
     this.pending = lazy ? { url, restore } : null;
     this.createdAt = Date.now();
 
@@ -107,6 +111,10 @@ class Tab {
 
   _wire() {
     const wc = this.wc;
+    shields.attachTab(wc, { isPrivate: this.isPrivate, session: wc.session, onChange: () => this.changed() });
+    wc.on('input-event', (_e, input) => {
+      if (GESTURES.has(input.type) && !(input.type.endsWith('KeyDown') && ['Escape', 'Control', 'Shift', 'Alt', 'Meta'].includes(input.key))) this.lastGesture = Date.now();
+    });
 
     wc.on('did-start-loading', () => {
       this.loading = true;
@@ -167,7 +175,15 @@ class Tab {
     wc.on('did-fail-load', (_e, code, description, validatedURL, isMainFrame) => {
       // -3 = ERR_ABORTED (user stopped, or the response became a download).
       if (!isMainFrame || code === -3) return;
-      this.error = { code, description, url: validatedURL };
+      // An automatic HTTPS upgrade that didn't work: quietly go back to http://.
+      const fallback = shields.httpsFallback(wc.session, validatedURL);
+      if (fallback) {
+        this.loadURL(fallback);
+        return;
+      }
+      // -20 = ERR_BLOCKED_BY_CLIENT: Vexa Shields stopped a dangerous site.
+      const dangerous = code === -20 ? shields.takeMaliciousBlock(wc.id, validatedURL) : null;
+      this.error = dangerous ? { code: 'malicious', description: 'VEXA_SHIELDS_DANGEROUS_SITE', url: dangerous } : { code, description, url: validatedURL };
       this.url = validatedURL || this.url;
       try {
         this.title = new URL(this.url).host || this.url;
@@ -259,6 +275,12 @@ class Tab {
 
   _windowOpen({ url, disposition, features }) {
     if (/^javascript:/i.test(url)) return { action: 'deny' };
+    // Vexa Shields: a window the user didn't ask for (no click or key press just before) is blocked.
+    if (/^https?:/i.test(this.url) && shields.blocksPopup(this.url, url, this.wc.session, this.lastGesture ? Date.now() - this.lastGesture : -1)) {
+      shields.count(this.wc.id, 'popups');
+      return { action: 'deny' };
+    }
+    this.lastGesture = 0; // one popup per click, like Chromium
     // Real popups (window.open with size features) get a small, plain window so
     // sign-in flows that rely on window.opener keep working.
     if (disposition === 'new-window' && features) {
@@ -371,6 +393,21 @@ class Tab {
     this.permissionRequests = [];
   }
 
+  /** "Continue anyway" on the dangerous-site warning. */
+  proceedUnsafe() {
+    if (!this.error || this.error.code !== 'malicious') return;
+    const url = this.error.url;
+    shields.proceed(this.wc.session, url);
+    this.loadURL(url);
+  }
+
+  _shieldsSnapshot(alive) {
+    if (!alive || !/^https?:/i.test(this.url) || (this.error && this.error.code !== 'malicious')) return null;
+    const st = shields.stats(this.wc.id);
+    const p = shields.forUrl(this.url, this.wc.session);
+    return { enabled: p.enabled, count: st.ads + st.trackers + st.cookies + st.fingerprinting + st.https + st.params + st.popups + st.malicious };
+  }
+
   /** Serializable snapshot for the browser UI. */
   snapshot() {
     const wc = this.wc;
@@ -393,6 +430,8 @@ class Tab {
       internal: isInternal(this.url),
       isNewTab: this.isNewTab,
       secure: /^https:/i.test(this.url),
+      pinned: this.pinned,
+      shields: this._shieldsSnapshot(alive),
       permission: this.permissionRequests[0]
         ? { id: this.permissionRequests[0].id, permission: this.permissionRequests[0].permission, origin: this.permissionRequests[0].origin, mediaTypes: this.permissionRequests[0].mediaTypes, externalURL: this.permissionRequests[0].externalURL, oneOff: this.permissionRequests[0].oneOff }
         : null,
@@ -408,7 +447,7 @@ class Tab {
   serialize() {
     if (this.pending) {
       const r = this.pending.restore;
-      return r ? { entries: r.entries, index: r.index, title: this.title, favicon: this.favicon } : { entries: [{ url: this.pending.url || NEWTAB_URL, title: this.title }], index: 0, title: this.title, favicon: this.favicon };
+      return r ? { entries: r.entries, index: r.index, title: this.title, favicon: this.favicon, pinned: this.pinned } : { entries: [{ url: this.pending.url || NEWTAB_URL, title: this.title }], index: 0, title: this.title, favicon: this.favicon, pinned: this.pinned };
     }
     let entries = [];
     let index = 0;
@@ -429,7 +468,7 @@ class Tab {
       index = Math.max(0, index - drop);
     }
     index = Math.min(Math.max(0, index), entries.length - 1);
-    return { entries, index, title: this.title, favicon: this.favicon };
+    return { entries, index, title: this.title, favicon: this.favicon, pinned: this.pinned };
   }
 
   destroy() {

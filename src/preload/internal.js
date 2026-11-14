@@ -28,6 +28,18 @@ if (location.protocol === 'vexa:' && location.hostname !== 'search') {
     }
   });
 } else if (/^https?:$/.test(location.protocol)) {
+  // ------------------------------------------------------------------ Vexa Shields: fingerprinting
+  // Ask the main process (synchronously, before any page script runs) whether this site
+  // has fingerprinting protection on, then install it in the page's world.
+  try {
+    const cfg = ipcRenderer.sendSync('vexa:shields-page');
+    if (cfg && cfg.fingerprinting && typeof contextBridge.executeInMainWorld === 'function') {
+      contextBridge.executeInMainWorld({ func: protect, args: [cfg.seed >>> 0, (api) => ipcRenderer.send('vexa:shields-fp', String(api).slice(0, 20))] });
+    }
+  } catch (err) {
+    console.warn('[vexa] fingerprinting protection unavailable:', err && err.message);
+  }
+
   // ------------------------------------------------------------------ Google sign-in
   // Google refuses sign-in from browsers it can't recognise as Chrome. The user agent
   // and Client Hints headers are fixed in the main process; this makes the JavaScript
@@ -245,4 +257,199 @@ if (location.protocol === 'vexa:' && location.hostname !== 'search') {
   ipcRenderer.on('vexa:af-fill', (_e, profile) => {
     if (profile && typeof profile === 'object') fillProfile(profile);
   });
+}
+
+// Vexa Shields fingerprinting protection. `protect` is run in the PAGE's world (via
+// contextBridge.executeInMainWorld) before any page script, so it must be self-contained.
+//
+// Approach ("farbling"): the values fingerprinting scripts read are nudged by an amount
+// nobody can see or hear, using a seed that is fixed for one site in one browsing session
+// and different everywhere else. Sites keep working; the reading stops identifying you
+// across sites and sessions.
+//   - canvas readback (toDataURL / toBlob / getImageData): a few pixel bits flipped
+//   - WebGL: GPU model hidden behind the generic renderer string; readPixels farbled
+//   - Web Audio sample reads: inaudible noise (about 1e-7)
+//   - navigator.hardwareConcurrency: a plausible value between 2 and the real count
+// Not covered: fonts, workers, cross-origin frames (they get their own pass when loaded).
+
+function protect(seed, report) {
+  const rnd = (n) => {
+    let t = (seed + Math.imul(n, 0x6d2b79f5)) >>> 0;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const noted = new Set();
+  const note = (api) => {
+    if (noted.has(api)) return;
+    noted.add(api);
+    try {
+      report(api);
+    } catch {
+      /* ignore */
+    }
+  };
+  const done = new WeakSet();
+
+  // Replace proto[name] with make(original), keeping the property's shape and name.
+  const wrap = (proto, name, make) => {
+    if (!proto) return;
+    const desc = Object.getOwnPropertyDescriptor(proto, name);
+    if (!desc || typeof desc.value !== 'function') return;
+    const orig = desc.value;
+    const fn = make(orig);
+    Object.defineProperty(fn, 'name', { value: name });
+    Object.defineProperty(fn, 'length', { value: orig.length });
+    Object.defineProperty(proto, name, { ...desc, value: fn });
+  };
+
+  function farblePixels(data) {
+    const pixels = Math.floor(data.length / 4);
+    if (!pixels) return;
+    const flips = Math.min(64, Math.max(4, Math.floor(pixels / 2000)));
+    for (let i = 0; i < flips; i++) {
+      const p = Math.floor(rnd(i + 1) * pixels) * 4;
+      const ch = Math.floor(rnd(i + 7919) * 3);
+      data[p + ch] ^= 1;
+    }
+  }
+
+  function apply(w) {
+    if (!w || done.has(w)) return;
+    done.add(w);
+    let origGetImageData = null;
+
+    // ---------------------------------------------------------------- canvas 2D
+    wrap(w.CanvasRenderingContext2D && w.CanvasRenderingContext2D.prototype, 'getImageData', (orig) => {
+      origGetImageData = orig;
+      return function (...args) {
+        const img = orig.apply(this, args);
+        note('canvas');
+        farblePixels(img.data);
+        return img;
+      };
+    });
+    const farbledCopy = (canvas) => {
+      const wdt = canvas.width;
+      const hgt = canvas.height;
+      if (!wdt || !hgt || wdt * hgt > 16e6 || !origGetImageData) return null;
+      const copy = w.document.createElement('canvas');
+      copy.width = wdt;
+      copy.height = hgt;
+      const ctx = copy.getContext('2d');
+      ctx.drawImage(canvas, 0, 0);
+      const img = origGetImageData.call(ctx, 0, 0, wdt, hgt);
+      farblePixels(img.data);
+      ctx.putImageData(img, 0, 0);
+      return copy;
+    };
+    for (const name of ['toDataURL', 'toBlob']) {
+      wrap(w.HTMLCanvasElement && w.HTMLCanvasElement.prototype, name, (orig) => function (...args) {
+        note('canvas');
+        let copy = null;
+        try {
+          copy = farbledCopy(this);
+        } catch {
+          copy = null;
+        }
+        return orig.apply(copy || this, args);
+      });
+    }
+
+    // ---------------------------------------------------------------- WebGL
+    const UNMASKED_VENDOR = 0x9245;
+    const UNMASKED_RENDERER = 0x9246;
+    for (const C of [w.WebGLRenderingContext, w.WebGL2RenderingContext]) {
+      if (!C) continue;
+      wrap(C.prototype, 'getParameter', (orig) => function (p) {
+        if (p === UNMASKED_VENDOR || p === UNMASKED_RENDERER) {
+          note('webgl');
+          return orig.call(this, p === UNMASKED_VENDOR ? 0x1f00 : 0x1f01); // VENDOR / RENDERER
+        }
+        return orig.apply(this, arguments);
+      });
+      wrap(C.prototype, 'readPixels', (orig) => function (...args) {
+        const r = orig.apply(this, args);
+        const out = args[6];
+        if (out && out instanceof w.Uint8Array) {
+          note('webgl');
+          farblePixels(out);
+        }
+        return r;
+      });
+    }
+
+    // ---------------------------------------------------------------- Web Audio
+    const touched = new WeakSet();
+    const farbleSamples = (arr) => {
+      if (!arr || touched.has(arr)) return;
+      touched.add(arr);
+      for (let i = 0; i < arr.length; i += 97) arr[i] += (rnd(i + 31) - 0.5) * 2e-7;
+    };
+    if (w.AudioBuffer) {
+      wrap(w.AudioBuffer.prototype, 'getChannelData', (orig) => function (...args) {
+        const arr = orig.apply(this, args);
+        note('audio');
+        farbleSamples(arr);
+        return arr;
+      });
+      wrap(w.AudioBuffer.prototype, 'copyFromChannel', (orig) => function (...args) {
+        const r = orig.apply(this, args);
+        note('audio');
+        const dest = args[0];
+        if (dest) for (let i = 0; i < dest.length; i += 97) dest[i] += (rnd(i + 31) - 0.5) * 2e-7;
+        return r;
+      });
+    }
+    if (w.AnalyserNode) {
+      wrap(w.AnalyserNode.prototype, 'getFloatFrequencyData', (orig) => function (...args) {
+        const r = orig.apply(this, args);
+        note('audio');
+        const a = args[0];
+        if (a) for (let i = 0; i < a.length; i += 7) a[i] += (rnd(i + 53) - 0.5) * 1e-4;
+        return r;
+      });
+    }
+
+    // ---------------------------------------------------------------- CPU count
+    try {
+      const NavProto = w.Navigator && w.Navigator.prototype;
+      const d = NavProto && Object.getOwnPropertyDescriptor(NavProto, 'hardwareConcurrency');
+      if (d && d.get) {
+        const real = d.get.call(w.navigator);
+        if (real > 2) {
+          const value = 2 + Math.floor(rnd(4242) * (real - 1));
+          const getter = { get hardwareConcurrency() { return value; } };
+          Object.defineProperty(NavProto, 'hardwareConcurrency', { ...d, get: Object.getOwnPropertyDescriptor(getter, 'hardwareConcurrency').get });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    // ---------------------------------------------------------------- same-origin frames
+    // A script could create an about:blank iframe and use its untouched canvas; protect
+    // such frames the moment their window is reached.
+    const IF = w.HTMLIFrameElement && w.HTMLIFrameElement.prototype;
+    for (const prop of ['contentWindow', 'contentDocument']) {
+      const d = IF && Object.getOwnPropertyDescriptor(IF, prop);
+      if (!d || !d.get) continue;
+      const get = d.get;
+      const holder = {
+        get [prop]() {
+          const v = get.call(this);
+          try {
+            const win = prop === 'contentWindow' ? v : v && v.defaultView;
+            if (win && win.document) apply(win);
+          } catch {
+            /* cross-origin */
+          }
+          return v;
+        }
+      };
+      Object.defineProperty(IF, prop, { ...d, get: Object.getOwnPropertyDescriptor(holder, prop).get });
+    }
+  }
+
+  apply(window);
 }

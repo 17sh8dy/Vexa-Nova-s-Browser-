@@ -13,7 +13,7 @@
     <main class="main">
       <div class="page-head"><h1>Settings</h1></div>
       <nav class="jump" id="jump">
-        <a href="#general">General</a><a href="#appearance">Appearance</a><a href="#search">Search</a><a href="#privacy">Privacy</a><a href="#passwords">Passwords &amp; autofill</a><a href="#sync">Sync</a><a href="#extensions">Extensions</a><a href="#permissions">Site permissions</a><a href="#downloads">Downloads</a><a href="#about">About</a>
+        <a href="#general">General</a><a href="#appearance">Appearance</a><a href="#search">Search</a><a href="#shields">Shields</a><a href="#privacy">Privacy</a><a href="#passwords">Passwords &amp; autofill</a><a href="#sync">Sync</a><a href="#extensions">Extensions</a><a href="#permissions">Site permissions</a><a href="#downloads">Downloads</a><a href="#about">About</a>
       </nav>
 
       <section class="section" id="general">
@@ -57,6 +57,10 @@
             <div class="label"><b>Show bookmarks bar</b><small>Ctrl+Shift+B</small></div>
             <label class="switch"><input type="checkbox" data-setting="showBookmarksBar" /><span></span></label>
           </div>
+          <div class="row">
+            <div class="label"><b>New Tab page</b><small>Wallpaper, automatic changes, shortcuts and widgets</small></div>
+            <a class="btn small" href="vexa://newtab/#customise">Customise</a>
+          </div>
         </div>
       </section>
 
@@ -77,13 +81,17 @@
         </div>
       </section>
 
+      <section class="section" id="shields">
+        <h2>Vexa Shields</h2>
+        <p class="section-lead">Shields protect you on every website, and everything they do happens on this computer: no lists are downloaded and nothing about your browsing is sent anywhere. These are the defaults; change them for one site from the shield button next to the address bar.</p>
+        <div class="card" id="shields-defaults"></div>
+        <h2 class="sub-h">Sites with their own Shields settings</h2>
+        <div class="card" id="shields-sites"></div>
+      </section>
+
       <section class="section" id="privacy">
         <h2>Privacy &amp; security</h2>
         <div class="card">
-          <div class="row">
-            <div class="label"><b>Block third-party cookies</b><small>Stops cookies being sent to or set by other sites embedded in the page you're on. Some embedded sign-ins may stop working.</small></div>
-            <label class="switch"><input type="checkbox" data-setting="blockThirdPartyCookies" /><span></span></label>
-          </div>
           <div class="row">
             <div class="label"><b>Send “Do Not Track” and Global Privacy Control</b><small>Asks sites not to track or sell your data. Sites decide whether to honour it.</small></div>
             <label class="switch"><input type="checkbox" data-setting="doNotTrack" /><span></span></label>

@@ -166,6 +166,120 @@
     send('download', { id: item ? item.dataset.id : null, action: b.dataset.dl });
   });
 
+
+  // ------------------------------------------------------------------ Vexa Shields
+  const SH_ROWS = [
+    ['ads', 'Ads & trackers', I.target, (s) => s.ads + s.trackers, ['ads', 'trackers']],
+    ['cookies', 'Cross-site cookies', I.cookie, (s) => s.cookies, ['cookies']],
+    ['fingerprinting', 'Fingerprinting', I.fingerprint, (s) => s.fingerprinting, ['fingerprinting']],
+    ['https', 'Insecure connections', I.lockUp, (s) => s.https, ['https']],
+    ['popups', 'Popups & tracking links', I.popup, (s) => s.popups + s.params, ['popups', 'params']]
+  ];
+  const SH_SWITCHES = [
+    ['ads', 'Block third-party ads'],
+    ['trackers', 'Block trackers'],
+    ['cookies', 'Block cross-site cookies'],
+    ['fingerprinting', 'Fingerprinting protection'],
+    ['https', 'Upgrade connections to HTTPS'],
+    ['malicious', 'Dangerous-site protection'],
+    ['params', 'Remove tracking parameters'],
+    ['popups', 'Block intrusive popups']
+  ];
+  let shExpanded = false;
+  let shShown = 0; // the number currently on screen (for the count-up)
+  let shSite = null;
+  const sw = (on, attrs) => `<button class="sw ${on ? 'on' : ''}" role="switch" aria-checked="${on ? 'true' : 'false'}" ${attrs}><span></span></button>`;
+
+  function shTotal(st) {
+    return st.ads + st.trackers + st.cookies + st.fingerprinting + st.https + st.params + st.popups + st.malicious;
+  }
+
+  function renderShields(d) {
+    card.className = 'card shields';
+    if (!d.applicable) {
+      card.innerHTML = `<div class="sh-empty">${I.vexaShield}<p>Vexa Shields protect websites. There is nothing to block on this page.</p></div>`;
+      return;
+    }
+    if (d.site !== shSite) {
+      shSite = d.site;
+      shShown = 0;
+    }
+    const p = d.protections;
+    const on = p.enabled;
+    const total = shTotal(d.stats);
+    const status = !on ? ['down', 'SHIELDS DOWN'] : d.custom ? ['custom', 'PROTECTED · CUSTOM'] : ['on', 'PROTECTED'];
+    const rows = SH_ROWS.map(([key, label, icon, count, keys]) => {
+      const active = on && keys.some((k) => p[k]);
+      const n = count(d.stats);
+      const value = !active ? '<span class="sh-off">Off</span>' : key === 'https' && n ? `${n} upgraded` : String(n);
+      return `<div class="sh-row ${active ? '' : 'inactive'}"><span class="sh-ricon">${icon}</span><span class="sh-rlabel">${label}</span><span class="sh-rval">${value}</span></div>`;
+    }).join('');
+    const switches = SH_SWITCHES.map(([key, label]) => {
+      const def = d.defaults[key];
+      const val = p[key];
+      const note = on && val !== def ? '<span class="sh-dot" title="Different from your global setting"></span>' : '';
+      return `<div class="sh-srow ${on ? '' : 'inactive'}"><span>${label}${note}</span>${sw(val, `data-sh="protection" data-key="${key}" data-val="${val ? '1' : '0'}" ${on ? '' : 'disabled'}`)}</div>`;
+    }).join('');
+    card.innerHTML = `
+      <div class="sh-hero ${status[0]}">
+        <div class="sh-top">
+          <span class="sh-crest">${on ? I.vexaShield : I.vexaShieldOff}</span>
+          <div class="sh-title"><div class="sh-name">Vexa Shields</div><div class="sh-host" title="${esc(d.host)}">${esc(d.host)}</div></div>
+          <span class="sh-pill ${status[0]}">${status[1]}</span>
+        </div>
+        <div class="sh-count"><span class="sh-num">${on ? shShown : 0}</span><span class="sh-cap">${on ? (total === 1 ? 'thing blocked on this page' : 'things blocked on this page') : 'Nothing is blocked while Shields are down'}</span></div>
+      </div>
+      ${d.dangerous ? '<div class="sh-warn">This site is on Vexa\'s phishing and scam list.</div>' : ''}
+      <div class="sh-master">
+        <div><b>Shields for this site</b><small>${on ? 'On. Turn off if the site doesn\'t work properly.' : 'Off. Ads, trackers and fingerprinting are allowed here.'}</small></div>
+        ${sw(on, `data-sh="site" data-val="${on ? '1' : '0'}"`)}
+      </div>
+      <div class="sh-rows">${rows}</div>
+      <button class="sh-expand ${shExpanded ? 'open' : ''}" data-sh="expand">${I.chevronDown}<span>Customise for this site</span></button>
+      <div class="sh-custom" ${shExpanded ? '' : 'hidden'}>${switches}</div>
+      <div class="sh-foot">
+        ${d.custom ? '<button class="link-btn" data-sh="reset">Reset this site</button>' : '<span class="sh-hint">' + (d.isPrivate ? 'Changes here end with this private window' : 'Changes reload the page') + '</span>'}
+        <button class="link-btn" data-sh="settings">All Shields settings</button>
+      </div>`;
+    if (on) countUp(total);
+  }
+
+  function countUp(target) {
+    const el = card.querySelector('.sh-num');
+    if (!el) return;
+    const from = shShown;
+    shShown = target;
+    if (target <= from) {
+      el.textContent = String(target);
+      return;
+    }
+    const t0 = performance.now();
+    const dur = Math.min(700, 250 + (target - from) * 12);
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / dur);
+      const eased = 1 - Math.pow(1 - k, 3);
+      if (el.isConnected) el.textContent = String(Math.round(from + (target - from) * eased));
+      if (k < 1 && el.isConnected) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  card.addEventListener('click', (e) => {
+    if (!current || current.kind !== 'shields') return;
+    const b = e.target.closest('[data-sh]');
+    if (!b || b.disabled) return;
+    const op = b.dataset.sh;
+    if (op === 'expand') {
+      shExpanded = !shExpanded;
+      b.classList.toggle('open', shExpanded);
+      card.querySelector('.sh-custom').hidden = !shExpanded;
+      return;
+    }
+    if (op === 'site') return send('shields', { op: 'site', enabled: b.dataset.val !== '1' });
+    if (op === 'protection') return send('shields', { op: 'protection', key: b.dataset.key, value: b.dataset.val !== '1' });
+    if (op === 'reset' || op === 'settings') return send('shields', { op });
+  });
+
   // ------------------------------------------------------------------ suggestions
   const SG_ICON = { search: I.search, url: I.globe, history: I.clock, bookmark: I.bookmark };
   function renderSuggestions(d) {
@@ -198,6 +312,7 @@
     if (current.kind === 'menu') renderMenu(current.data);
     else if (current.kind === 'downloads') renderDownloads(current.data);
     else if (current.kind === 'suggestions') renderSuggestions(current.data);
+    else if (current.kind === 'shields') renderShields(current.data);
     place();
   }
 
@@ -208,6 +323,7 @@
     card.style.animation = '';
     render();
     if (p.kind === 'menu') setTimeout(() => card.querySelector('.mi')?.focus({ focusVisible: false }), 0);
+    if (p.kind === 'shields') setTimeout(() => card.querySelector('.sh-master .sw')?.focus({ focusVisible: false }), 0);
   });
   api.on('popup:update', ({ kind, data }) => {
     if (!current || current.kind !== kind) return;

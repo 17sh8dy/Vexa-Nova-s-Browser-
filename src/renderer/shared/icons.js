@@ -41,6 +41,20 @@
     bell: s('<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>', 'width="16" height="16"'),
     external: s('<path d="M14 4.5h5.5V10"/><path d="M19.5 4.5 11 13"/><path d="M18 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H10"/>', 'width="16" height="16"'),
     shield: s('<path d="M12 3.5 19 6v5.5c0 4.3-3 7.6-7 9-4-1.4-7-4.7-7-9V6z"/>', 'width="16" height="16"'),
+    // Vexa Shields: a crest carrying the Vexa "V".
+    vexaShield: s('<path d="M12 2.8 19.6 5.6v5.8c0 4.7-3.2 8.2-7.6 9.8-4.4-1.6-7.6-5.1-7.6-9.8V5.6z"/><path d="m8.7 8.9 3.3 6.5 3.3-6.5"/>'),
+    vexaShieldOff: s('<path d="M7.2 4.2 12 2.8l7.6 2.8v5.8c0 1.5-.3 2.9-.9 4.1M16.6 18.6A11 11 0 0 1 12 21.2c-4.4-1.6-7.6-5.1-7.6-9.8V6.5"/><path d="M3.5 3.5l17 17"/>'),
+    target: s('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>', 'width="16" height="16"'),
+    cookie: s('<path d="M20.5 12.5A8.5 8.5 0 1 1 11.5 3.5a3 3 0 0 0 3.5 3.5 3 3 0 0 0 3 3 2.5 2.5 0 0 0 2.5 2.5z"/><circle cx="9" cy="10" r=".9" fill="currentColor"/><circle cx="14.5" cy="15" r=".9" fill="currentColor"/><circle cx="9.5" cy="15.5" r=".9" fill="currentColor"/>', 'width="16" height="16"'),
+    fingerprint: s('<path d="M6.5 17.5c1-2 1.5-3.8 1.5-6a4 4 0 0 1 8 0c0 2.5-.4 4.8-1.3 7"/><path d="M12 11.5c0 3-.6 5.6-2 8"/><path d="M4.5 13.5c.3-.7.5-1.4.5-2a7 7 0 0 1 12.8-3.9"/><path d="M19 11.5c0 1.8-.2 3.4-.6 5"/>', 'width="16" height="16"'),
+    lockUp: s('<rect x="5.5" y="10.5" width="13" height="9" rx="2.2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 6.8-1.2"/><path d="M12 13.5v3"/>', 'width="16" height="16"'),
+    popup: s('<rect x="3.5" y="7.5" width="12" height="12" rx="2"/><path d="M8.5 4.5h9a2 2 0 0 1 2 2v9"/><path d="m7 11 5 5M12 11l-5 5"/>', 'width="16" height="16"'),
+    palette: s('<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.2-1-1.5-1-2.6 0-.9.7-1.6 1.6-1.6H17a3.5 3.5 0 0 0 3.5-3.5C20.5 7 16.7 3.5 12 3.5z"/><circle cx="7.5" cy="11.5" r="1" fill="currentColor"/><circle cx="9.5" cy="7.7" r="1" fill="currentColor"/><circle cx="14.3" cy="7.5" r="1" fill="currentColor"/>', 'width="16" height="16"'),
+    image: s('<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 17 5-4.5 3.5 3 3-2.5L20 17"/>', 'width="16" height="16"'),
+    upload: s('<path d="M12 16V5"/><path d="m7 10 5-5 5 5"/><path d="M5 20h14"/>', 'width="16" height="16"'),
+    trash: s('<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>', 'width="14" height="14"'),
+    check: s('<path d="m5 12.5 4.5 4.5L19 7.5"/>', 'width="14" height="14"'),
+    danger: s('<path d="M12 2.8 19.6 5.6v5.8c0 4.7-3.2 8.2-7.6 9.8-4.4-1.6-7.6-5.1-7.6-9.8V5.6z"/><path d="M12 8v5"/><circle cx="12" cy="16" r=".7" fill="currentColor"/>'),
     settings: s('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>', 'width="16" height="16"')
   };
   // Brand mark (used in the browser UI).

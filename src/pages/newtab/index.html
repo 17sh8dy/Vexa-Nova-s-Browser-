@@ -9,8 +9,11 @@
 </head>
 <body>
   <div class="sky" aria-hidden="true"></div>
+  <div id="bg" class="bg" aria-hidden="true"><div class="bg-img"></div><div class="bg-scrim"></div></div>
+
   <main class="ntp">
     <div class="hero">
+      <div id="clock" class="clock" hidden><div class="clock-time"></div><div class="clock-date"></div></div>
       <img class="logo" src="vexa://shared/logo.svg" alt="" />
       <div class="wordmark">vexa</div>
       <div id="greeting" class="greeting"></div>
@@ -24,12 +27,70 @@
     <div id="tiles-empty" class="tiles-empty" hidden>Sites you visit often will appear here.</div>
     <div id="restore" class="restore" hidden><button class="linkish" id="restore-btn">Restore hidden sites</button></div>
   </main>
+
+  <a id="shields-widget" class="widget shields-widget" href="vexa://settings/#shields" hidden></a>
+  <button id="customise-btn" class="customise-btn" hidden><span class="cb-icon"></span><span>Customise</span></button>
+
   <footer class="ntp-foot">
     <a href="vexa://bookmarks/">Bookmarks</a><span>·</span>
     <a href="vexa://history/">History</a><span>·</span>
     <a href="vexa://downloads/">Downloads</a><span>·</span>
     <a href="vexa://settings/">Settings</a>
   </footer>
+
+  <div id="drawer-scrim" class="drawer-scrim" hidden></div>
+  <aside id="drawer" class="drawer" hidden aria-label="Customise New Tab">
+    <header class="dr-head">
+      <h2>Customise New Tab</h2>
+      <button id="drawer-close" class="dr-x" aria-label="Close"></button>
+    </header>
+    <div class="dr-body">
+      <section class="dr-sec">
+        <h3>Wallpaper</h3>
+        <div id="wp-grid" class="wp-grid"></div>
+        <p class="dr-note">Your own images: JPG, PNG or WebP, up to 20 MB. You can also drop an image anywhere on this page. They stay on this computer.</p>
+      </section>
+
+      <section class="dr-sec">
+        <h3>Change automatically</h3>
+        <div class="dr-row">
+          <span>Change wallpaper</span>
+          <select id="rotate">
+            <option value="off">Never</option>
+            <option value="newtab">Every new tab</option>
+            <option value="hourly">Every hour</option>
+            <option value="daily">Every day</option>
+          </select>
+        </div>
+        <div class="dr-row" id="rotate-source-row">
+          <span>Choose from</span>
+          <div class="seg" id="rotate-source"><button data-v="gallery">Gallery</button><button data-v="uploads">My images</button><button data-v="all">Both</button></div>
+        </div>
+      </section>
+
+      <section class="dr-sec" id="adjust-sec">
+        <h3>Adjust</h3>
+        <div class="dr-slider"><label for="s-blur">Blur</label><input type="range" id="s-blur" min="0" max="40" step="1" data-key="blur" /><output id="o-blur"></output></div>
+        <div class="dr-slider"><label for="s-brightness">Brightness</label><input type="range" id="s-brightness" min="30" max="130" step="1" data-key="brightness" /><output id="o-brightness"></output></div>
+        <div class="dr-slider"><label for="s-overlay">Overlay</label><input type="range" id="s-overlay" min="0" max="85" step="1" data-key="overlay" /><output id="o-overlay"></output></div>
+        <p class="dr-note" id="adjust-note" hidden>Choose a wallpaper to adjust it.</p>
+      </section>
+
+      <section class="dr-sec">
+        <h3>Show on New Tab</h3>
+        <label class="dr-row"><span>Shortcuts</span><span class="switch"><input type="checkbox" data-show="shortcuts" /><span></span></span></label>
+        <label class="dr-row"><span>Greeting</span><span class="switch"><input type="checkbox" data-show="greeting" /><span></span></span></label>
+        <label class="dr-row"><span>Clock</span><span class="switch"><input type="checkbox" data-show="clock" /><span></span></span></label>
+        <label class="dr-row"><span>Vexa Shields stats</span><span class="switch"><input type="checkbox" data-show="shieldsStats" /><span></span></span></label>
+      </section>
+    </div>
+    <footer class="dr-foot">
+      <button class="btn" id="reset-look">Reset to default appearance</button>
+    </footer>
+  </aside>
+
+  <div id="drop-hint" class="drop-hint" hidden><div><span class="dh-icon"></span>Drop to use as your wallpaper</div></div>
+
   <script src="vexa://shared/icons.js"></script>
   <script src="vexa://shared/page.js"></script>
   <script src="newtab.js"></script>

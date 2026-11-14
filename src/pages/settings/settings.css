@@ -53,3 +53,9 @@
 .sync-form input { width: 100%; box-sizing: border-box; }
 .pill.beta { background: var(--accent-soft); color: var(--accent-text); font-weight: 700; letter-spacing: 0.6px; font-size: 10.5px; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--surface); font-size: 11.5px; color: var(--text-dim); margin-left: 6px; }
+
+/* Vexa Shields section */
+.section-lead { margin: -4px 4px 14px; font-size: 13px; line-height: 1.5; color: var(--text-dim); max-width: 720px; }
+.empty-row small { color: var(--text-faint); }
+a.btn { display: inline-flex; align-items: center; text-decoration: none; color: var(--text); }
+a.btn:hover { text-decoration: none; }

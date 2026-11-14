@@ -81,6 +81,12 @@ class Target {
     if (key === 'Enter' && !ctrl && !alt) await this.send('Input.dispatchKeyEvent', { type: 'char', ...base, text: '\r' });
     await this.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
   }
+  /** A real mouse click (trusted input, counts as a user gesture) at the centre of an element. */
+  async click(selector) {
+    const r = await this.eval(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.scrollIntoView({ block: 'center' }); const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
+    await this.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: r.x, y: r.y });
+    for (const type of ['mousePressed', 'mouseReleased']) await this.send('Input.dispatchMouseEvent', { type, x: r.x, y: r.y, button: 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: 1 });
+  }
   close() {
     try {
       this.ws.close();
@@ -94,6 +100,17 @@ async function targets() {
   const res = await fetch(`http://127.0.0.1:${PORT}/json/list`);
   return res.json();
 }
+/** Like target(), but the page that is actually on screen (a closing tab can linger in the list). */
+async function visibleTarget(pred, label) {
+  return waitFor(async () => {
+    for (const info of (await targets()).filter((t) => t.type === 'page' && pred(t.url))) {
+      const t = await new Target(info).connect();
+      if ((await t.eval('document.visibilityState')) === 'visible') return t;
+      t.close();
+    }
+    return null;
+  }, { label: `visible target ${label}` });
+}
 async function target(pred, label) {
   const info = await waitFor(async () => (await targets()).find((t) => t.type === 'page' && pred(t.url)), { label: `target ${label}` });
   return new Target(info).connect();
@@ -102,7 +119,7 @@ async function target(pred, label) {
 // ------------------------------------------------------------------ app lifecycle
 let app = null;
 function launch(profile) {
-  const args = ['.', `--remote-debugging-port=${PORT}`];
+  const args = ['.', `--remote-debugging-port=${PORT}`, ...EXTRA_ARGS];
   if (process.platform === 'linux' && process.getuid && process.getuid() === 0) args.push('--no-sandbox');
   app = spawn(ELECTRON, args, { cwd: ROOT, env: { ...process.env, VEXA_PROFILE: profile }, stdio: ['ignore', 'pipe', 'pipe'] });
   app.stderr.on('data', (d) => {
@@ -151,6 +168,8 @@ function screenshot(name) {
 
 // ------------------------------------------------------------------ tests
 const results = [];
+let EXTRA_ARGS = []; // Chromium switches for every launch (host mapping for the Shields tests)
+let diagnose = null; // set once the app is up: describes the tabs when a check fails
 async function check(name, fn) {
   const t0 = Date.now();
   try {
@@ -160,6 +179,13 @@ async function check(name, fn) {
   } catch (e) {
     results.push({ name, ok: false, error: e.message });
     console.log(`  ✘ ${name}\n      ${e.message}`);
+    if (diagnose) {
+      try {
+        console.log('      state: ' + (await diagnose()));
+      } catch {
+        /* app gone */
+      }
+    }
   }
 }
 function assert(cond, msg) {
@@ -171,6 +197,13 @@ async function main() {
   const srv = await start(0);
   const site = `http://127.0.0.1:${srv.address().port}`;
   const siteAlt = `http://localhost:${srv.address().port}`;
+  // Vexa Shields: send test hostnames (an ad network, a tracker, an ordinary CDN, a site on
+  // the dangerous list, and an http-only site whose https port refuses TLS) to the test server.
+  const DANGEROUS_HOST = fs.readFileSync(path.join(ROOT, 'src', 'main', 'data', 'shields', 'malicious-hosts.txt'), 'utf8').split(/\r?\n/).find((l) => l && !l.startsWith('#') && /^[a-z0-9.-]+$/.test(l));
+  const p = srv.address().port;
+  // Windows marks covered windows "occluded" (pages hidden, no animation frames); tests must
+  // not depend on what else is on screen.
+  EXTRA_ARGS = ['--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', `--host-resolver-rules=MAP ads.doubleclick.net 127.0.0.1, MAP b.scorecardresearch.com 127.0.0.1, MAP static.vexa-e2e-cdn.net 127.0.0.1, MAP ${DANGEROUS_HOST} 127.0.0.1, MAP upgrade.vexa-e2e-cdn.net:80 127.0.0.1:${p}, MAP upgrade.vexa-e2e-cdn.net:443 127.0.0.1:${p}`];
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'vexa-e2e-'));
   const dlDir = path.join(profile, 'dl');
   fs.mkdirSync(dlDir);
@@ -191,13 +224,17 @@ async function main() {
     return s.tabs.find((t) => t.id === s.activeId);
   };
   const typeAndGo = async (text, opts = {}) => {
-    await chrome.eval(`(() => { const a = document.querySelector('#address'); a.focus(); a.value=''; return true })()`);
+    await chrome.eval(`(() => { const a = document.querySelector('#address'); a.focus(); a.value=''; a.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward' })); return true })()`);
     await sleep(80);
     await chrome.send('Input.insertText', { text });
     await sleep(opts.waitSuggest ?? 250);
     await chrome.key('Enter', opts);
   };
   const tabTarget = async (pred, label) => target(pred, label);
+  diagnose = async () => {
+    const s = await state();
+    return JSON.stringify({ popup: s.popup, tabs: s.tabs.map((t) => ({ active: t.id === s.activeId, url: t.url, title: t.title, loading: t.loading, error: t.error && t.error.code, shields: t.shields })) });
+  };
 
   await check('starts with one New Tab page', async () => {
     const s = await waitFor(state, { label: 'state' });
@@ -316,12 +353,12 @@ async function main() {
   });
 
   await check('target=_blank opens a new tab; window.open keeps window.opener', async () => {
-    const page = await tabTarget((u) => u === site + '/', 'home');
-    await page.eval(`document.getElementById('blank').click()`);
+    const page = await visibleTarget((u) => u === site + '/', 'home');
+    await page.click('#blank');
     await waitFor(async () => (await state()).tabs.length === 2, { label: 'target=_blank tab' });
     await chrome.key('w', { ctrl: true });
     await waitFor(async () => (await state()).tabs.length === 1, { label: 'closed _blank tab' });
-    await page.eval(`document.getElementById('winopen').click()`);
+    await page.click('#winopen');
     page.close();
     const s = await waitFor(async () => {
       const x = await state();
@@ -523,6 +560,219 @@ async function main() {
     const log = await (await fetch(site + '/__cookielog')).json();
     assert(log.length >= 1, 'check request made');
     assert(log.every((c) => !c.includes('tp=1')), 'third-party cookie must not be sent: ' + JSON.stringify(log));
+  });
+
+  // ------------------------------------------------------------------ Vexa Shields
+  const shieldsHits = async () => (await fetch(site + '/__hits')).json();
+  const overlay = async () => target((u) => u.includes('overlay/index.html') && !u.includes('mode=status'), 'overlay');
+  const readSettings = () => JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8'));
+
+  await check('Vexa Shields: third-party ads + trackers blocked, ordinary third party loads, popup blocked, fingerprinting farbled', async () => {
+    await shieldsHits();
+    const tabsBefore = (await state()).tabs.length;
+    await typeAndGo(site + '/shields');
+    await waitFor(async () => (await active()).title === 'Shields test', { label: 'shields page' });
+    await sleep(1200);
+    const hits = await shieldsHits();
+    assert(hits.includes('static.vexa-e2e-cdn.net|ok'), 'ordinary third party should load: ' + JSON.stringify(hits));
+    assert(!hits.some((h) => h.endsWith('|ad')), 'ad network must be blocked: ' + JSON.stringify(hits));
+    assert(!hits.some((h) => h.endsWith('|tracker')), 'tracker must be blocked: ' + JSON.stringify(hits));
+    const s = await state();
+    assert(s.tabs.length === tabsBefore, `window.open without a click must be blocked (tabs ${tabsBefore} -> ${s.tabs.length})`);
+    const pg = await tabTarget((u) => u.endsWith('/shields'), 'shields page');
+    assert((await pg.eval(`document.getElementById('fp').textContent`)) === 'farbled', 'canvas readback should be farbled');
+    pg.close();
+    const a = await waitFor(async () => {
+      const x = await active();
+      return x.shields && x.shields.count >= 4 && x;
+    }, { label: 'shields count' });
+    assert(a.shields.enabled, 'shields on');
+    const badge = await chrome.eval(`!document.querySelector('#shields-btn').hidden && document.querySelector('#shields-btn .sh-badge').textContent`);
+    assert(badge && Number(badge) >= 4, 'badge shows the count: ' + badge);
+    // The panel
+    await chrome.eval(`document.querySelector('#shields-btn').click()`);
+    await waitFor(async () => (await state()).popup === 'shields', { label: 'shields panel open' });
+    const ov = await overlay();
+    const txt = await waitFor(() => ov.eval(`document.querySelector('.card.shields') && document.querySelector('.card.shields').innerText`), { label: 'panel text' });
+    assert(/Vexa Shields/.test(txt) && /PROTECTED/.test(txt) && /127\.0\.0\.1/.test(txt), 'panel text: ' + txt);
+    assert(/Ads & trackers/.test(txt) && /Fingerprinting/.test(txt), 'panel rows');
+    ov.close();
+  });
+
+  await check('Vexa Shields: per-site off lets everything load (and is remembered), reset restores', async () => {
+    const ov = await overlay();
+    await ov.eval(`document.querySelector('.sh-master .sw').click()`);
+    await waitFor(() => readSettings().shieldsSites?.['127.0.0.1']?.enabled === false, { label: 'site override saved' });
+    await waitFor(async () => (await active()).shields && (await active()).shields.enabled === false, { label: 'shields down in state' });
+    await sleep(1500); // the page reloads with Shields down
+    const hits = await shieldsHits();
+    assert(hits.some((h) => h.endsWith('|ad')) && hits.some((h) => h.endsWith('|tracker')), 'with Shields down everything loads: ' + JSON.stringify(hits));
+    // With Shields down the page's no-click popup is allowed too (it opens a tab and takes
+    // focus, which closes the panel). Close it to get back to the test page.
+    const opened = await waitFor(async () => (await state()).tabs.filter((t) => t.url.endsWith('/page2')), { label: 'popup allowed' });
+    assert(opened.length === 1, 'the popup opened once with Shields down');
+    await chrome.eval(`window.vexaChrome.cmd('close-tab', { tabId: ${opened[0].id} })`);
+    await waitFor(async () => (await active()).url.endsWith('/shields'), { label: 'back on the test page' });
+    await chrome.eval(`document.querySelector('#shields-btn').click()`);
+    await waitFor(async () => (await state()).popup === 'shields', { label: 'panel reopened' });
+    const txt = await waitFor(() => ov.eval(`document.querySelector('.card.shields') && document.querySelector('.card.shields').innerText`), { label: 'panel text' });
+    assert(/SHIELDS DOWN/.test(txt), 'panel says down: ' + txt);
+    await ov.eval(`document.querySelector('[data-sh="reset"]').click()`);
+    await waitFor(() => !readSettings().shieldsSites?.['127.0.0.1'], { label: 'site override removed' });
+    await waitFor(async () => (await active()).shields && (await active()).shields.enabled, { label: 'shields back up' });
+    ov.close();
+    await chrome.eval(`document.querySelector('#shields-btn').click()`);
+    await waitFor(async () => (await state()).popup === null, { label: 'panel closed' });
+  });
+
+  await check('Vexa Shields: tracking parameters removed from top-level links', async () => {
+    await typeAndGo(site + '/page2?utm_source=newsletter&id=7&fbclid=AbC');
+    const a = await waitFor(async () => {
+      const x = await active();
+      return x.title === 'Second Page' && x;
+    }, { label: 'page2' });
+    assert(a.url === site + '/page2?id=7', 'cleaned url: ' + a.url);
+  });
+
+  await check('Vexa Shields: HTTPS upgrade falls back to http:// when a site has no https', async () => {
+    await typeAndGo('http://upgrade.vexa-e2e-cdn.net/page2');
+    const a = await waitFor(async () => {
+      const x = await active();
+      return x.title === 'Second Page' && x;
+    }, { label: 'fallback page', timeout: 15000 });
+    assert(a.url === 'http://upgrade.vexa-e2e-cdn.net/page2', 'ended on http: ' + a.url);
+  });
+
+  await check('Vexa Shields: dangerous site stopped with a warning; continue anyway works', async () => {
+    await shieldsHits(); // start from an empty log
+    await typeAndGo(`http://${DANGEROUS_HOST}:${srv.address().port}/`);
+    const a = await waitFor(async () => {
+      const x = await active();
+      return x.error && x.error.code === 'malicious' && x;
+    }, { label: 'dangerous-site warning' });
+    void a;
+    const title = await chrome.eval(`!document.querySelector('#panel').hidden && document.querySelector('#panel-title').textContent`);
+    assert(title && /dangerous site/i.test(title), 'warning title: ' + title);
+    const hits = await shieldsHits();
+    assert(!hits.length, 'nothing from the dangerous site loaded');
+    await chrome.eval(`document.querySelector('#panel-proceed').click()`);
+    await waitFor(async () => (await active()).title === 'Vexa Test Home', { label: 'continued anyway' });
+  });
+
+  await check('settings: Vexa Shields section toggles persist', async () => {
+    await typeAndGo('vexa://settings/#shields');
+    const sp = await tabTarget((u) => u.startsWith('vexa://settings'), 'settings');
+    await waitFor(() => sp.eval(`document.querySelectorAll('#shields-defaults [data-shield]').length === 8`), { label: 'shield toggles' });
+    await sp.eval(`(() => { const b = document.querySelector('[data-shield="trackers"]'); b.checked = false; b.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await waitFor(() => readSettings().shields?.trackers === false, { label: 'trackers off saved' });
+    await sp.eval(`(() => { const b = document.querySelector('[data-shield="trackers"]'); b.checked = true; b.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await waitFor(() => readSettings().shields?.trackers === true, { label: 'trackers on saved' });
+    // The old third-party-cookie key follows Shields (older versions and sync read it).
+    await sp.eval(`(() => { const b = document.querySelector('[data-shield="cookies"]'); b.checked = false; b.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await waitFor(() => readSettings().blockThirdPartyCookies === false, { label: 'legacy key follows' });
+    await sp.eval(`(() => { const b = document.querySelector('[data-shield="cookies"]'); b.checked = true; b.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await waitFor(() => readSettings().blockThirdPartyCookies === true, { label: 'legacy key back on' });
+    sp.close();
+  });
+
+  // ------------------------------------------------------------------ New Tab wallpapers
+  await check('New Tab: gallery wallpaper, adjustments, widgets and customise drawer', async () => {
+    await typeAndGo('vexa://newtab/');
+    const ntp = await tabTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
+    await waitFor(() => ntp.eval(`document.body.classList.contains('ready')`), { label: 'ntp ready' });
+    assert(!(await ntp.eval(`document.body.classList.contains('has-wallpaper')`)), 'starts with the default look');
+    assert(await ntp.eval(`!document.querySelector('#shields-widget').hidden`), 'Shields stats widget on by default');
+    await ntp.eval(`vexa.call('wallpaper.choose', 'gallery', 'dusk')`);
+    await waitFor(() => ntp.eval(`document.body.classList.contains('has-wallpaper') && document.querySelector('.bg-img').style.backgroundImage.includes('dusk.svg')`), { label: 'dusk shown live' });
+    assert(await ntp.eval(`document.body.classList.contains('wp-dark')`), 'dark wallpaper → light text');
+    await ntp.eval(`vexa.call('ntp.set', { blur: 12, brightness: 80, overlay: 40, clock: true, shortcuts: false })`);
+    await waitFor(() => ntp.eval(`!document.querySelector('#clock').hidden && document.querySelector('#tiles').hidden && getComputedStyle(document.body).getPropertyValue('--wp-blur').trim() === '12px'`), { label: 'adjustments applied' });
+    await waitFor(() => {
+      const cfg = readSettings().newTab;
+      return cfg.wallpaper.kind === 'gallery' && cfg.wallpaper.id === 'dusk' && cfg.blur === 12 && cfg.clock === true;
+    }, { label: 'saved to settings.json' });
+    let bad = '';
+    try {
+      await ntp.eval(`vexa.call('ntp.set', { blur: 999 })`);
+    } catch (e) {
+      bad = e.message;
+    }
+    assert(/Invalid/.test(bad), 'out-of-range value rejected');
+    await ntp.eval(`document.querySelector('#customise-btn').click()`);
+    await waitFor(() => ntp.eval(`!document.querySelector('#drawer').hidden && document.querySelectorAll('#wp-grid .wp-tile').length === 11`), { label: 'drawer with default + 9 gallery + upload' });
+    assert(await ntp.eval(`document.querySelector('.wp-tile.sel').dataset.id === 'dusk'`), 'dusk is marked selected');
+    ntp.close();
+  });
+
+  await check('New Tab: upload own image (PNG), served from the profile, never given the page API; rotation; reset', async () => {
+    const ntp = await tabTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
+    await ntp.eval(`vexa.call('ntp.set', { brightness: 100, overlay: 0 })`); // undim, so the image's own brightness decides
+    // A real PNG made by the page itself.
+    const up = await ntp.eval(`(async () => {
+      const c = document.createElement('canvas'); c.width = 64; c.height = 36;
+      const x = c.getContext('2d'); const g = x.createLinearGradient(0, 0, 64, 0); g.addColorStop(0, '#f0abfc'); g.addColorStop(1, '#fde68a'); x.fillStyle = g; x.fillRect(0, 0, 64, 36);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      return vexa.call('wallpaper.uploadData', 'My photo.png', new Uint8Array(await blob.arrayBuffer()));
+    })()`);
+    assert(up && up.kind === 'upload' && /^vexa:\/\/newtab\/uploads\/[a-f0-9]{16}\.png$/.test(up.url) && up.name === 'My photo', 'upload result: ' + JSON.stringify(up));
+    assert(fs.existsSync(path.join(profile, 'wallpapers', up.url.split('/').pop())), 'file copied into the profile');
+    await waitFor(() => ntp.eval(`document.querySelector('.bg-img').style.backgroundImage.includes(${JSON.stringify(up.url)})`), { label: 'upload shown' });
+    await waitFor(() => ntp.eval(`document.body.classList.contains('wp-light')`), { label: 'light image → dark text' });
+    let rejected = '';
+    try {
+      await ntp.eval(`vexa.call('wallpaper.uploadData', 'evil.png', new TextEncoder().encode('<svg onload=alert(1)>'))`);
+    } catch (e) {
+      rejected = e.message;
+    }
+    assert(/Only JPG, PNG and WebP/.test(rejected), 'non-image rejected: ' + rejected);
+    // Rotation: every new tab, from gallery + uploads.
+    await ntp.eval(`vexa.call('ntp.set', { rotate: 'newtab', rotateSource: 'all' })`);
+    const picks = new Set();
+    for (let i = 0; i < 6; i++) picks.add((await ntp.eval(`vexa.call('ntp.get')`)).current.url);
+    assert(picks.size >= 3, 'rotation varies: ' + [...picks].join(', '));
+    // Uploads are served as image bytes, and only the exact files that were uploaded.
+    const served = await ntp.eval(`Promise.all([${JSON.stringify(up.url)}, 'vexa://newtab/uploads/0123456789abcdef.png', 'vexa://newtab/uploads/x.html'].map((u) => fetch(u).then((r) => r.status + ' ' + (r.headers.get('content-type') || ''))))`);
+    assert(served[0] === '200 image/png' && served[1].startsWith('404') && served[2].startsWith('404'), 'uploads served: ' + JSON.stringify(served));
+    ntp.close();
+    const ntp2 = await tabTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
+    await ntp2.eval(`vexa.call('wallpaper.remove', ${JSON.stringify(up.id)})`);
+    assert(!fs.existsSync(path.join(profile, 'wallpapers', up.url.split('/').pop())), 'file deleted on remove');
+    await ntp2.eval(`vexa.call('ntp.reset')`);
+    await waitFor(() => ntp2.eval(`!document.body.classList.contains('has-wallpaper') && document.querySelector('#clock').hidden && !document.querySelector('#tiles').hidden`), { label: 'reset to default look' });
+    ntp2.close();
+  });
+
+  await check('pinned tabs: pin moves left + compact, ordering kept, saved for restart, unpin', async () => {
+    await chrome.key('t', { ctrl: true });
+    await sleep(150);
+    await typeAndGo(site + '/page2');
+    await waitFor(async () => (await active()).title === 'Second Page', { label: 'page2 tab' });
+    let s = await state();
+    const pinId = s.activeId;
+    await chrome.eval(`window.vexaChrome.cmd('pin-tab', { tabId: ${pinId} })`);
+    s = await waitFor(async () => {
+      const x = await state();
+      return x.tabs[0].id === pinId && x.tabs[0].pinned && x;
+    }, { label: 'pinned tab moved to the left' });
+    const look = await chrome.eval(`(() => { const el = document.querySelector('.tab[data-id="${pinId}"]'); return { pinned: el.classList.contains('pinned'), width: Math.round(el.getBoundingClientRect().width), title: getComputedStyle(el.querySelector('.tab-title')).display, close: getComputedStyle(el.querySelector('.tab-close')).display }; })()`);
+    assert(look.pinned && look.width <= 44 && look.title === 'none' && look.close === 'none', 'compact pinned tab: ' + JSON.stringify(look));
+    // An ordinary tab can't be dragged in front of a pinned one.
+    const other = s.tabs[s.tabs.length - 1].id;
+    await chrome.eval(`window.vexaChrome.cmd('move-tab', { tabId: ${other}, index: 0 })`);
+    s = await waitFor(async () => {
+      const x = await state();
+      return x.tabs[0].id === pinId && x.tabs[1].id === other && x;
+    }, { label: 'ordinary tab stays after the pinned one' });
+    // Saved with the session, so it is pinned again after a restart.
+    await waitFor(() => /"pinned":\s*true/.test(fs.readFileSync(path.join(profile, 'session.json'), 'utf8')), { label: 'pinned saved in session.json' });
+    await chrome.eval(`window.vexaChrome.cmd('pin-tab', { tabId: ${pinId}, pinned: false })`);
+    s = await waitFor(async () => {
+      const x = await state();
+      return !x.tabs.find((t) => t.id === pinId).pinned && x;
+    }, { label: 'unpinned' });
+    assert(s.tabs.findIndex((t) => t.id === pinId) === 0, 'unpinned tab sits right after the (now empty) pinned group');
+    await chrome.eval(`window.vexaChrome.cmd('close-tab', { tabId: ${pinId} })`);
+    await waitFor(async () => !(await state()).tabs.some((t) => t.id === pinId), { label: 'closed' });
   });
 
   await check('clear browsing data from settings', async () => {

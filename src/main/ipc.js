@@ -18,6 +18,8 @@ const { autofill, FIELDS: AUTOFILL_FIELDS } = require('./autofill');
 const { extensions } = require('./extensions');
 const { sync } = require('./sync');
 const defaultBrowser = require('./default-browser');
+const { shields } = require('./shields');
+const { wallpapers } = require('./wallpapers');
 
 const RANGES = { hour: 3600e3, day: 86400e3, week: 7 * 86400e3, month: 28 * 86400e3 };
 const str = (v, max = 2000) => (typeof v === 'string' && v.length <= max ? v : '');
@@ -49,6 +51,29 @@ const api = {
   'settings.defaultDownloadDir': () => settings.downloadDir(),
   'settings.sitePermissions': () => settings.get('sitePermissions'),
   'settings.setSitePermission': (_ctx, origin, permission, decision) => settings.setSitePermission(String(origin), String(permission), decision == null ? null : decision === 'allow' ? 'allow' : 'block'),
+
+  // Vexa Shields (settings page + New Tab widget)
+  'shields.sites': () => settings.get('shieldsSites'),
+  'shields.resetSite': (_ctx, site) => shields.resetSite(str(site, 255)),
+  'shields.resetAllSites': () => settings.set('shieldsSites', {}),
+  'shields.lifetime': () => shields.lifetime(),
+
+  // New Tab page: wallpaper + layout
+  'ntp.get': (ctx) => wallpapers.pageData(ctx.win.isPrivate),
+  'ntp.set': (_ctx, patch) => settings.set('newTab', patch && typeof patch === 'object' ? patch : {}),
+  'ntp.reset': () => wallpapers.reset(),
+  'wallpaper.choose': (_ctx, kind, id) => wallpapers.choose(str(kind, 20), str(id, 100)),
+  'wallpaper.upload': async (ctx) => {
+    const res = await dialog.showOpenDialog(parentOf(ctx), {
+      title: 'Choose a wallpaper',
+      filters: [{ name: 'Images (JPG, PNG, WebP)', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
+      properties: ['openFile']
+    });
+    if (res.canceled || !res.filePaths[0]) return null;
+    return wallpapers.addFile(res.filePaths[0]);
+  },
+  'wallpaper.uploadData': (_ctx, name, bytes) => wallpapers.addBytes(str(name, 300), bytes),
+  'wallpaper.remove': (_ctx, id) => wallpapers.remove(str(id, 100)),
 
   // history
   'history.query': (_ctx, opts) => history.query(opts || {}),
@@ -230,6 +255,21 @@ function register() {
   });
   ipcMain.on('vexa:pm-used', (event, id) => {
     if (pageContext(event)) passwords.markUsed(str(id, 100));
+  });
+
+  // Vexa Shields glue for web pages: fingerprinting config (sync, read before page scripts
+  // run) and reports of protected API reads.
+  ipcMain.on('vexa:shields-page', (event) => {
+    try {
+      const frameUrl = event.senderFrame?.url || '';
+      event.returnValue = event.senderFrame === event.sender.mainFrame ? shields.pageConfig(event.sender.session, frameUrl) : { fingerprinting: false };
+    } catch {
+      event.returnValue = { fingerprinting: false };
+    }
+  });
+  ipcMain.on('vexa:shields-fp', (event, apiName) => {
+    if (event.senderFrame !== event.sender.mainFrame) return;
+    if (['canvas', 'webgl', 'audio'].includes(apiName)) shields.fingerprintAttempt(event.sender.id, apiName);
   });
 
   ipcMain.handle('vexa:api', async (event, method, ...args) => {

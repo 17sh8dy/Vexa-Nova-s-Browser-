@@ -71,6 +71,8 @@ if (!app.requestSingleInstanceLock()) {
     const { extensions } = require('./extensions');
     const { sync } = require('./sync');
     settings.init();
+    require('./shields').shields.init();
+    require('./wallpapers').wallpapers.init();
     history.init();
     bookmarks.init();
     downloads.init();
@@ -99,6 +101,7 @@ if (!app.requestSingleInstanceLock()) {
 
     // Background work after the first window is up.
     extensions.loadAll().catch(() => {});
+    setTimeout(() => require('./shields-rules').maliciousHosts(), 1500); // load the dangerous-site list off the startup path
     sync.init();
     require('./default-browser').refreshRegistration();
 

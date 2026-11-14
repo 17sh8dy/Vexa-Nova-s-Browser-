@@ -115,8 +115,13 @@ function refreshAllChrome() {
 
 let historyTimer = null;
 function wireDataEvents() {
+  require('./shields').shields.on('changed', () => {
+    for (const w of windows) w.updatePopup('shields', w.shieldsData());
+    refreshAllChrome();
+  });
   settings.on('changed', (key, value) => {
     if (key === 'theme') nativeTheme.themeSource = value;
+    if (key === 'shields' || key === 'shieldsSites') for (const w of windows) w.updatePopup('shields', w.shieldsData());
     refreshAllChrome();
     broadcastInternal('settings', { key, value });
   });

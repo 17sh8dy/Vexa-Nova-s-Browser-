@@ -53,14 +53,16 @@ The exe isn't code-signed, so Windows SmartScreen will warn ("More info → Run 
 | **Address bar** | URLs, bare domains (`github.com` → https), `localhost:3000` (→ http), file paths, search queries; suggestions from history + bookmarks; inline autocomplete; `Alt+Enter` opens in a new tab, `Ctrl+Enter` adds `www.` + `.com` |
 | **Navigation** | Back, forward, reload / stop, hard reload, home, loading spinner + progress sweep |
 | **Errors** | Branded error panel for DNS failures, offline, refused / timed-out connections, certificate errors (never bypassed), crashes — with Try again / Go back |
-| **Tabs** | New, close, switch, drag to reorder, middle-click close, reopen closed tab (with its history), duplicate, close others / to the right, mute, audio indicator, favicons |
+| **Tabs** | New, close, switch, drag to reorder, middle-click close, reopen closed tab (with its history), duplicate, close others / to the right, mute, audio indicator, favicons; **pin / unpin** from the tab's right-click menu (pinned tabs sit at the left as icons, stay pinned after a restart, and are kept by *Close other tabs*) |
 | **Links & popups** | `target=_blank` / Ctrl+click / middle-click open tabs next to the opener; `window.open` keeps `window.opener` (so sign-in flows work); sized popups open as small windows |
 | **Bookmarks** | Star / `Ctrl+D`, bookmarks bar (toggle), folders, manager page with search, edit, move, drag-to-reorder, import / export (standard HTML format used by Chrome, Edge and Firefox) |
 | **History** | Recorded per visit, grouped by day, search, delete one / many, top sites on the New Tab page |
 | **Downloads** | Saved to your Downloads folder (or ask each time), progress ring on the toolbar, downloads panel, full page with pause / resume / cancel / retry / open / show in folder |
 | **Find / zoom / print** | Find bar with match count, per-site zoom with indicator, system print dialog, view source, DevTools |
 | **Settings** | Startup behaviour, home page, theme (system / light / dark), search engine (DuckDuckGo default, Google, Bing, Brave, Ecosia, Startpage), bookmarks bar, download location, privacy, permissions |
-| **Privacy** | Private windows (in-memory session, nothing saved), Do Not Track + Global Privacy Control, third-party cookie blocking, clear browsing data, clear on exit, per-site permission prompts (camera, mic, location, notifications, …) with remembered decisions |
+| **Vexa Shields** | On by default, all local: blocks third-party ads and trackers (Vexa's own curated host lists), cross-site cookies, fingerprinting (canvas / WebGL / audio readings farbled per site and session), upgrades http:// to https:// with automatic fallback, warns before phishing/scam sites (bundled list), strips click-tracking parameters (`utm_*`, `fbclid`, `gclid`, …) and blocks popups opened without a click. Shield button next to the address bar shows what was blocked on the page, with a per-site on/off switch and per-protection overrides; defaults and the list of customised sites live in Settings → Shields. Private windows keep their per-site changes in memory only |
+| **New Tab page** | *Customise* drawer: Vexa wallpaper gallery (9 original pieces), your own JPG / PNG / WebP (up to 20 MB, file picker or drag-and-drop, kept in the profile), change automatically (every new tab / hour / day, from the gallery, your images or both), blur / brightness / overlay, show or hide shortcuts, greeting, clock and the Shields stats widget, reset to the default look. Text colour adapts to the image's brightness |
+| **Privacy** | Private windows (in-memory session, nothing saved), Do Not Track + Global Privacy Control, clear browsing data, clear on exit, per-site permission prompts (camera, mic, location, notifications, …) with remembered decisions |
 | **Persistence** | Settings, bookmarks, history, downloads list, open tabs (restored lazily on startup), window size/position |
 | **Passwords & autofill** | Offers to save logins after you sign in (never in private windows, "Never for this site" supported); fills a site's login automatically when you have exactly one saved, or via right-click → *Fill saved password*; manager in Settings (show / copy / edit / delete / add, CSV import & export); right-click → *Autofill contact details* from a saved profile (no payment cards). Passwords are encrypted with the OS keystore (Windows DPAPI, macOS Keychain, libsecret/kwallet) — if the OS can't encrypt, nothing is stored |
 | **Sync** | Server-less: one end-to-end encrypted file (scrypt → AES-256-GCM, passphrase you choose) in a folder you point at OneDrive / Dropbox / Google Drive / Syncthing. Syncs bookmarks, passwords, autofill details and main settings; history, tabs and downloads stay per device |
@@ -117,9 +119,19 @@ DRM in stock Electron.
 * **Main process** (`src/main`) owns all state. The UI is a thin renderer: main pushes a
   state snapshot, the UI sends commands back over a whitelisted IPC bridge.
 * **Internal pages** live under the privileged `vexa://` scheme (`newtab`, `settings`,
-  `history`, `bookmarks`, `downloads`), served from `src/pages` with a strict CSP. The tab
+  `history`, `bookmarks`, `downloads`), served from `src/pages` with a strict CSP. The page
   preload exposes the `vexa` API *only* on `vexa://` pages and the main process re-checks
-  the caller's URL on every call — websites get nothing.
+  the caller's URL on every call — websites get nothing. The preload is registered on the
+  *session* (`registerPreloadScript`, http/https/vexa URLs only), so it also runs in tabs that a
+  page opened itself with `target=_blank` / `window.open` (from 0.6.0; before that those tabs
+  had no preload at all).
+* **Vexa Shields** (`shields-rules.js` pure + unit tested, `shields.js` live state) sits in the
+  session's `webRequest` hooks, so every request of every tab passes through it. The ad /
+  tracker / fingerprinter lists are Vexa's own short curated lists of well-known third-party hosts
+  (not EasyList), so coverage is narrower than a filter-list blocker. The phishing / scam list is a
+  snapshot of The Block List Project (public domain) shipped in `src/main/data/shields/`; refresh it
+  with `node scripts/update-shield-lists.js` before a release. Nothing is downloaded at run time.
+  Fingerprinting protection is injected into the page's world before its scripts run.
 * **Vexa Search (beta)** is Nova's own search engine (`Vexa Search/`), offered as
   "Vexa Search (Beta)" in Settings → Search. It runs in the main process and is served at
   `vexa://search/`; its index ships with the app (`resources/vexa-search/`), so searching works
@@ -143,7 +155,9 @@ src/
     passwords.js, autofill.js   password manager (OS-keystore encrypted) and contact details
     sync.js          encrypted folder sync · extensions.js  unpacked extensions
     default-browser.js  default-browser registration · auth-prompt.js  HTTP sign-in dialog
-    psl.js + data/   Public Suffix List lookup used by third-party-cookie blocking
+    psl.js + data/   Public Suffix List lookup (third parties, per-site Shields)
+    shields-rules.js, shields.js   Vexa Shields: lists + matching (pure), per-site state + counts
+    wallpapers.js, image-type.js   New Tab wallpapers: gallery, uploads, rotation
     url.js           address-bar resolution (pure, unit tested)
     shortcuts.js     keyboard bindings
     context-menu.js  page / tab / bookmark context menus
@@ -152,7 +166,8 @@ src/
   renderer/        browser UI (chrome/), popup layer (overlay/), HTTP sign-in dialog (auth/), shared tokens + icons
   pages/           vexa:// pages: newtab, settings, history, bookmarks, downloads, shared/
 build/             app icons (svg / png / ico), installer.nsh
-scripts/           use-widevine.js (opt-in DRM build)
+scripts/           use-widevine.js (opt-in DRM build), update-shield-lists.js (dangerous-site list),
+                   make-wallpapers.js (regenerates the New Tab gallery SVGs)
 test/              unit tests, end-to-end runner, local test site
 ```
 
@@ -215,9 +230,11 @@ What remains, honestly:
 * **Default browser:** Windows deliberately requires you to confirm the choice in Settings → Default apps; Vexa can register and open that page but cannot finish it for you. Dev runs (`npm start`) register the dev Electron binary.
 * **Location:** works once you paste a Google API key (with the Geolocation API enabled) in Settings → Site permissions and restart. Without one, sites can't get a position.
 * **Third-party cookie blocking** now uses the full Public Suffix List, but still works at the network level: third-party iframes can read/write `document.cookie` within their own frame.
+* **Vexa Shields ad and tracker blocking** uses Vexa's own short host lists, not EasyList-style filter lists: it stops the big ad networks and trackers but not ads a site serves from its own domain, and there is no cosmetic filtering (empty ad slots can remain). Some sites detect it and ask you to allow ads; turn Shields off for that site from the shield button. Fingerprinting protection covers canvas, WebGL, Web Audio and the CPU count in the page and its same-origin frames — not fonts, Web Workers or cross-origin frames. The dangerous-site list is a snapshot taken at build time: new phishing sites appear daily, so it can't be complete. Popup blocking needs a click or key press in the tab within 5 seconds, one popup per gesture (as in Chromium).
+* **New Tab wallpapers:** drag-and-drop of an image onto the New Tab page is wired up but the drop gesture itself hasn't been exercised by an automated test (uploading through the same code path is).
 * **Clear browsing data:** the time range applies to history and the download list. Chromium can't clear cookies, site data or the cache by time range, so those are only cleared for *All time* (with a range chosen they're skipped, not over-deleted).
 * **Updates:** Vexa has **no auto-update and no update check** (`"publish": null`, no updater code). Users only get a new version by downloading it from https://vexa.shadylabs.workers.dev, and nothing in the app tells them one exists yet. See *Roadmap*.
-* **Testing:** the automated suites pass on Windows 11 (unit tests and 33 end-to-end checks, including Vexa Search). The 0.5.5 installers were built and the packaged app was driven end to end.
+* **Testing:** the automated suites pass on Windows 11 (unit tests and 42 end-to-end checks, including Vexa Search, Shields, New Tab wallpapers and pinned tabs). The 0.5.5 installers were built and the packaged app was driven end to end; 0.6.0 has been driven in the dev app, not yet as an installer build.
 
 ---
 

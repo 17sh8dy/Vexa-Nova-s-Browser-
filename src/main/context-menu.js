@@ -131,6 +131,7 @@ function showTabMenu(win, tab) {
   const template = [
     { label: 'New tab to the right', click: () => win.addTab({ index: idx + 1 }) },
     { type: 'separator' },
+    { label: tab.pinned ? 'Unpin tab' : 'Pin tab', click: () => win.setPinned(tab.id, !tab.pinned) },
     { label: 'Reload', click: () => win.runAction('reload', { tab }) },
     { label: 'Duplicate', click: () => win.duplicateTab(tab.id) },
     { label: muted ? 'Unmute tab' : 'Mute tab', click: () => (tab.wc.setAudioMuted(!muted), tab.changed()) },
@@ -139,8 +140,8 @@ function showTabMenu(win, tab) {
     ...moveItems(win, tab),
     { type: 'separator' },
     { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => win.closeTab(tab.id) },
-    { label: 'Close other tabs', enabled: win.tabs.length > 1, click: () => win.closeOtherTabs(tab.id) },
-    { label: 'Close tabs to the right', enabled: idx < win.tabs.length - 1, click: () => win.closeTabsToRight(tab.id) },
+    { label: 'Close other tabs', enabled: win.tabs.some((t) => t !== tab && !t.pinned), click: () => win.closeOtherTabs(tab.id) },
+    { label: 'Close tabs to the right', enabled: win.tabs.slice(idx + 1).some((t) => !t.pinned), click: () => win.closeTabsToRight(tab.id) },
     { type: 'separator' },
     { label: 'Reopen closed tab', accelerator: 'CmdOrCtrl+Shift+T', enabled: win.closedTabs.length > 0, click: () => win.reopenClosedTab() }
   ];
