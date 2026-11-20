@@ -315,8 +315,7 @@ class Tab {
     this.lastGesture = 0; // one popup per click, like Chromium
     // A distracting site opened as a new tab or window during a focus session: show the panel in a new tab.
     if (require('./focus').focus.blocks(this, url)) {
-      const t = this.win.openInNewTab('about:blank', { opener: this });
-      t._showFocusBlock(url);
+      this.win.openInNewTab(url, { opener: this }); // loadURL shows the panel without loading the site
       return { action: 'deny' };
     }
     // Real popups (window.open with size features) get a small, plain window so

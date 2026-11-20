@@ -1436,6 +1436,7 @@ class VexaWindow extends EventEmitter {
         if (args.op === 'extend') return focus.extend(this, Number(args.minutes) || 10);
         if (args.op === 'minimal') return focus.toggleMinimal(this);
         if (args.op === 'allow') return focus.allowOnce(this, tab);
+        if (args.op === 'dismiss') return focus.dismiss(this, tab);
         if (args.op === 'start') return focus.start(this, { name: args.name, minutes: Number(args.minutes), blockDistractions: args.blockDistractions, minimal: args.minimal, bringTab: args.bringTab });
         return;
       }

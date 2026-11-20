@@ -17,7 +17,8 @@ const MAX_COLLECTIONS = 500;
 const MAX_ITEMS = 5000;
 const MAX_FILE = 50 * 1024 * 1024;
 const MEDIA = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', mp4: 'video/mp4', webm: 'video/webm' };
-const RISKY = /\.(exe|bat|cmd|com|msi|msix|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|jar|scr|lnk|hta|reg|cpl|pif|appref-ms|application|sh|command|app)$/i;
+// Files that run code (or mount something that can) when opened: Vexa only reveals them in their folder.
+const RISKY = /\.(exe|bat|cmd|com|msi|msix|msixbundle|appx|appxbundle|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|jar|scr|lnk|url|website|scf|hta|reg|cpl|msc|chm|pif|appref-ms|application|iso|img|vhd|vhdx|sh|command|app|dmg|pkg)$/i;
 const COLORS = ['#8b5cf6', '#ec4899', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#6366f1'];
 
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -106,7 +107,16 @@ class Collections extends EventEmitter {
   view(id) {
     const c = this.get(id);
     if (!c) return null;
-    return { ...structuredClone(c), cover: this._coverUrl(c), items: c.items.map((i) => ({ ...i, src: i.file && MEDIA[i.file.split('.').pop()] ? this.fileUrl(i.file) : '' })) };
+    // A file can be missing on this device (Sync carries the item, not the file).
+    const has = (f) => !!f && fs.existsSync(path.join(this.dir, f));
+    return {
+      ...structuredClone(c),
+      cover: this._coverUrl(c),
+      items: c.items.map((i) => {
+        const missing = !!i.file && !has(i.file);
+        return { ...i, missing, src: !missing && i.file && MEDIA[i.file.split('.').pop()] ? this.fileUrl(i.file) : '' };
+      })
+    };
   }
 
   lastUsedId() {
@@ -391,14 +401,8 @@ class Collections extends EventEmitter {
 
   applySync(data) {
     if (!isObj(data) || !Array.isArray(data.collections)) return false;
-    const before = this.store.data.collections;
-    const localFiles = new Set(before.flatMap((c) => c.items.map((i) => i.file)).filter(Boolean));
-    this.store.data.collections = data.collections.filter(isObj).slice(0, MAX_COLLECTIONS).map((c) => {
-      const n = this._normCollection(c);
-      // Files don't travel with Sync: an item whose file isn't on this device keeps its metadata only.
-      for (const i of n.items) if (i.file && !localFiles.has(i.file) && !fs.existsSync(path.join(this.dir, i.file))) i.missing = true;
-      return n;
-    });
+    // Files don't travel with Sync: an item whose file isn't on this device shows as missing (see view()).
+    this.store.data.collections = data.collections.filter(isObj).slice(0, MAX_COLLECTIONS).map((c) => this._normCollection(c));
     this.store.data.modified = data.modified || Date.now();
     this.store.save();
     this.emit('changed', { fromSync: true });

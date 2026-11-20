@@ -740,7 +740,7 @@
       $('#panel-desc').innerHTML = `<b>${host}</b> is on your distraction list, so Vexa is holding it back${f && f.name ? ` while you focus on <b>${escapeHtml(f.name)}</b>` : ' during this focus session'}. You can change the list in Settings → Focus.`;
       $('#panel-code').textContent = 'VEXA_FOCUS_DISTRACTION';
       $('#panel-back').hidden = false;
-      $('#panel-back').textContent = t.canGoBack ? 'Go back' : 'Open a New Tab';
+      $('#panel-back').textContent = 'Go back';
       $('#panel-back').classList.add('primary');
       $('#panel-retry').hidden = true;
       return;
@@ -790,7 +790,8 @@
   $('#panel-retry').addEventListener('click', () => cmd('action', { action: 'reload' }));
   $('#panel-back').addEventListener('click', () => {
     const t = activeTab();
-    if (t && t.error && (t.error.code === 'malicious' || t.error.code === 'focus') && !t.canGoBack) cmd('navigate', { input: 'vexa://newtab/' });
+    if (t && t.error && t.error.code === 'focus') cmd('focus', { op: 'dismiss' });
+    else if (t && t.error && t.error.code === 'malicious' && !t.canGoBack) cmd('navigate', { input: 'vexa://newtab/' });
     else cmd('action', { action: 'back' });
   });
   $('#panel-proceed').addEventListener('click', () => cmd('shields-proceed'));

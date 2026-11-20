@@ -254,7 +254,7 @@
     else if (i.type === 'note') media = `<div class="it-note ${i.quote ? 'quote' : ''}">${esc(i.note)}</div>`;
     const fav = i.url && /^https?:/.test(i.url) ? `<img class="it-fav" alt="" src="${esc(i.favicon || new URL(i.url).origin + '/favicon.ico')}">` : '';
     const title = i.type === 'note' && !i.url ? '' : `<div class="it-title">${esc(i.title || i.name || i.url)}</div>`;
-    const sub = [i.url ? `<span class="it-host">${fav}${esc(host)}</span>` : '', i.type === 'file' && i.size ? window.V.fmtBytes(i.size) : '', i.type === 'file' && i.name ? esc(i.name) : '', i.note && i.type !== 'note' ? `<span class="it-n">${esc(i.note.slice(0, 140))}</span>` : ''].filter(Boolean).join(' · ');
+    const sub = [i.missing ? '<span class="it-missing">File not on this device</span>' : '', i.url ? `<span class="it-host">${fav}${esc(host)}</span>` : '', i.type === 'file' && i.size ? window.V.fmtBytes(i.size) : '', i.type === 'file' && i.name ? esc(i.name) : '', i.note && i.type !== 'note' ? `<span class="it-n">${esc(i.note.slice(0, 140))}</span>` : ''].filter(Boolean).join(' · ');
     return `<article class="item ${i.type} ${i.favorite ? 'fav' : ''}" draggable="true" data-id="${esc(i.id)}">
       ${media}
       <div class="it-body">
@@ -264,7 +264,7 @@
       </div>
       <div class="it-actions">
         ${i.url && /^https?:/.test(i.url) ? `<button class="ibtn" data-act="open" title="Open">${I.external}</button>` : ''}
-        ${i.type === 'file' ? `<button class="ibtn" data-act="file" title="Open file">${I.folderOpen}</button>` : ''}
+        ${i.type === 'file' && !i.missing ? `<button class="ibtn" data-act="file" title="Open file">${I.folderOpen}</button>` : ''}
         <button class="ibtn" data-act="menu" title="More">${I.menu}</button>
       </div>
     </article>`;

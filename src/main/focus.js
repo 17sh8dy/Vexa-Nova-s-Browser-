@@ -158,6 +158,9 @@ class Focus {
         spaces.update(space.id, { name: f.name, focus: false, icon: 'target' });
         result = { kept: space.id };
       } else {
+        // Leave the session's Space first, so closing or moving its tabs never empties the visible Space.
+        const back = spaces.get(f.fromSpace) || spaces.first();
+        if (win.spaceId === space.id) win.switchSpace(back.id);
         if (outcome === 'collect' && tabs.length) {
           const { collections } = require('./collections');
           const c = collections.create({ name: f.name, description: `Focus session, ${new Date(f.startedAt).toLocaleString()}` });
@@ -165,9 +168,7 @@ class Focus {
           result = { collectionId: c.id, count: tabs.length };
           for (const t of [...win._list(space.id)]) win.closeTab(t.id);
         }
-        // Remaining tabs go back to where the session started (spaceRemoved moves them).
-        const back = spaces.get(f.fromSpace) || spaces.first();
-        if (win.spaceId === space.id) win.switchSpace(back.id);
+        // Whatever is left goes back to where the session started.
         this._moveAll(win, space.id, back.id);
         if (spaces.list().length > 1) spaces.remove(space.id);
       }
@@ -203,6 +204,18 @@ class Focus {
     const until = f.allowed.get(site);
     if (until && until > Date.now()) return false;
     return cfg.blocklist.some((b) => site === b || site.endsWith('.' + b) || hostOf(url) === b);
+  }
+
+  /** "Go back" on the stay-focused panel: show the page the tab is still on (nothing was loaded). */
+  dismiss(win, tab) {
+    if (!tab || !tab.error || tab.error.code !== 'focus') return;
+    const current = tab.wc.isDestroyed() ? '' : tab.wc.getURL();
+    if (!current || current === 'about:blank') return tab.loadURL(require('./url').NEWTAB_URL);
+    tab.error = null;
+    tab.url = current;
+    tab.title = tab.wc.getTitle();
+    win.layout();
+    tab.changed();
   }
 
   /** "Allow for 5 minutes" on the stay-focused panel. */
