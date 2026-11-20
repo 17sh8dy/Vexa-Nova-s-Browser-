@@ -676,7 +676,7 @@ async function main() {
   });
 
   // ------------------------------------------------------------------ New Tab wallpapers
-  await check('New Tab: gallery wallpaper, adjustments, widgets and customise drawer', async () => {
+  await check('New Tab: gallery wallpaper, adjustments, widgets and customize drawer', async () => {
     await typeAndGo('vexa://newtab/');
     const ntp = await tabTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
     await waitFor(() => ntp.eval(`document.body.classList.contains('ready')`), { label: 'ntp ready' });
@@ -698,7 +698,7 @@ async function main() {
       bad = e.message;
     }
     assert(/Invalid/.test(bad), 'out-of-range value rejected');
-    await ntp.eval(`document.querySelector('#customise-btn').click()`);
+    await ntp.eval(`document.querySelector('#customize-btn').click()`);
     await waitFor(() => ntp.eval(`!document.querySelector('#drawer').hidden && document.querySelectorAll('#wp-grid .wp-tile').length === 11`), { label: 'drawer with default + 9 gallery + upload' });
     assert(await ntp.eval(`document.querySelector('.wp-tile.sel').dataset.id === 'dusk'`), 'dusk is marked selected');
     ntp.close();
@@ -1053,6 +1053,276 @@ async function main() {
     await waitFor(() => cp.eval(`document.querySelector('#r').textContent === 'none'`), { label: 'cookie cleared' });
     cp.close();
     sp.close();
+  });
+
+  // ================================================================== 0.90
+  const cmd = (name, args = {}) => chrome.eval(`vexaChrome.cmd(${JSON.stringify(name)}, ${JSON.stringify(args)})`);
+  const overlayTarget = () => target((u) => u.includes('overlay/index.html') && !u.includes('mode=status'), 'overlay');
+
+  await check('Command Center: Ctrl+Space, fuzzy actions + tabs, natural-language command creates a Space', async () => {
+    await typeAndGo(site + '/page2');
+    await waitFor(async () => (await active()).title === 'Second Page', { label: 'page2' });
+    await chrome.key('t', { ctrl: true });
+    await sleep(200);
+    await chrome.key(' ', { ctrl: true, code: 'Space', vk: 32 });
+    await waitFor(async () => (await state()).popup === 'command', { label: 'command center open' });
+    const ov = await overlayTarget();
+    const ask = async (q) => {
+      await ov.eval(`(() => { const i = document.querySelector('#cc-q'); i.value = ${JSON.stringify(q)}; i.dispatchEvent(new Event('input')); })()`);
+      return waitFor(async () => {
+        const t = await ov.eval(`[...document.querySelectorAll('.cc-item .cc-title')].map((e) => e.textContent)`);
+        return t.length ? t : null;
+      }, { label: 'results for ' + q });
+    };
+    assert((await ask('reopen')).includes('Reopen closed tab'), 'action found by fuzzy match');
+    assert((await ask('second')).includes('Second Page'), 'open tab found');
+    const titles = await ask('create a space called E2E Work');
+    assert(titles[0] === 'Create a Space called “E2E Work”', 'phrase parsed: ' + titles[0]);
+    const before = (await state()).spaceId;
+    await ov.eval(`document.querySelector('#cc-q').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+    await waitFor(async () => {
+      const s = await state();
+      return s.spaceId !== before && s.spaces.some((x) => x.name === 'E2E Work' && x.id === s.spaceId) && s.tabs.length === 1 && s.tabs[0].isNewTab;
+    }, { label: 'switched to the new, empty Space' });
+    ov.close();
+  });
+
+  await check('Spaces: separate tabs, switching keeps each Space\'s tabs, Ctrl+Shift+1, tab moves, isolated cookies, restore format', async () => {
+    let s = await state();
+    const work = s.spaceId;
+    const first = s.spaces[0].id;
+    await typeAndGo(site + '/c/first-check');
+    await waitFor(async () => (await active()).title === 'First party check', { label: 'page in E2E Work' });
+    await chrome.key('1', { ctrl: true, shift: true, code: 'Digit1', vk: 49 });
+    await waitFor(async () => (await state()).spaceId === first, { label: 'Ctrl+Shift+1 → first Space' });
+    s = await state();
+    assert(!s.tabs.some((t) => t.url.endsWith('/c/first-check')), 'first Space does not show E2E Work tabs');
+    await cmd('switch-space', { spaceId: work });
+    await waitFor(async () => (await state()).tabs.some((t) => t.url.endsWith('/c/first-check')), { label: 'E2E Work tab still there' });
+    // Move a tab to another Space through the window API (the tab menu uses the same call).
+    const tabId = (await active()).id;
+    await chrome.eval(`vexaChrome.cmd('switch-space', { spaceId: ${JSON.stringify(first)} })`);
+    await waitFor(async () => (await state()).spaceId === first, { label: 'back to first' });
+    // Isolated Space: its own cookie jar.
+    await typeAndGo(site + '/c/first-set');
+    await waitFor(async () => (await active()).title === 'First party cookie', { label: 'cookie set in default session' });
+    const ntpTab = await (async () => {
+      await chrome.key('t', { ctrl: true });
+      return tabTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
+    })();
+    await waitFor(() => ntpTab.eval('!!window.vexa'), { label: 'ntp api' });
+    const iso = await ntpTab.eval(`vexa.call('spaces.create', { name: 'E2E Isolated', isolated: true })`);
+    assert(iso.isolated, 'isolated Space created');
+    ntpTab.close();
+    await cmd('switch-space', { spaceId: iso.id });
+    await waitFor(async () => (await state()).spaceId === iso.id, { label: 'in isolated Space' });
+    await typeAndGo(site + '/c/first-check');
+    await waitFor(async () => (await active()).title === 'First party check', { label: 'check page in isolated Space' });
+    const isoPage = await visibleTarget((u) => u.endsWith('/c/first-check'), 'isolated check');
+    assert((await isoPage.eval(`document.querySelector('#r').textContent`)) === 'none', 'isolated Space does not see the default cookie');
+    isoPage.close();
+    // Tabs can't move into an isolated Space (it has another cookie jar), but can between ordinary ones.
+    await cmd('switch-space', { spaceId: work });
+    await waitFor(async () => (await state()).spaceId === work, { label: 'back in E2E Work' });
+    const moveRes = await chrome.eval(`vexaChrome.cmd('move-to-space', { tabId: ${tabId}, spaceId: ${JSON.stringify(iso.id)} }).then(() => 'moved', (e) => e.message)`);
+    assert(/isolated/.test(moveRes), 'move into isolated Space refused: ' + moveRes);
+    await chrome.key('t', { ctrl: true });
+    await sleep(200);
+    const extra = (await active()).id;
+    await cmd('move-to-space', { tabId: extra, spaceId: first });
+    await waitFor(async () => !(await state()).tabs.some((t) => t.id === extra), { label: 'tab left this Space' });
+    await cmd('switch-space', { spaceId: first });
+    await waitFor(async () => (await state()).tabs.some((t) => t.id === extra), { label: 'tab arrived in the first Space' });
+    await cmd('close-tab', { tabId: extra });
+    await cmd('switch-space', { spaceId: work });
+    // Session file keeps tabs per Space.
+    await waitFor(() => {
+      const sess = JSON.parse(fs.readFileSync(path.join(profile, 'session.json'), 'utf8'));
+      const w = sess.windows[0];
+      return w && w.spaces && w.spaces[work] && w.spaces[iso.id] && w.spaces[work].tabs.some((t) => t.entries.some((e) => e.url.endsWith('/c/first-check')));
+    }, { label: 'session.json has tabs per Space', timeout: 6000 });
+  });
+
+  await check('address bar: @scope filters, keyword shortcuts, search history, switch-to-tab', async () => {
+    const sp = await (async () => {
+      await chrome.key(',', { ctrl: true });
+      return tabTarget((u) => u.startsWith('vexa://settings'), 'settings');
+    })();
+    await waitFor(() => sp.eval('!!window.vexa'), { label: 'settings api' });
+    const list = await sp.eval(`vexa.call('settings.get').then((s) => s.searchShortcuts)`);
+    await sp.eval(`vexa.call('settings.set', 'searchShortcuts', ${JSON.stringify([...list, { key: 'loc', name: 'Local test', url: site + '/headers?q=%s' }])})`);
+    sp.close();
+    const sug = await cmd('suggest', { text: '@tabs first-check' });
+    assert(sug.scope && sug.scope.key === 'tabs' && sug.items.some((i) => i.tab), 'scope → tab results: ' + JSON.stringify(sug.items.map((i) => i.type)));
+    const eng = await cmd('suggest', { text: '@loc hello' });
+    assert(eng.items[0].subtitle === 'Search Local test' && eng.items[0].url === site + '/headers?q=hello', 'keyword engine suggestion');
+    await typeAndGo('@loc vexa rocks');
+    await waitFor(async () => (await active()).url === site + '/headers?q=vexa%20rocks', { label: 'keyword search navigated' });
+    await waitFor(() => JSON.parse(fs.readFileSync(path.join(profile, 'search-history.json'), 'utf8')).items.some((x) => x.q === 'vexa rocks'), { label: 'search remembered', timeout: 5000 });
+    const recent = await cmd('suggest', { text: 'vexa r' });
+    assert(recent.items.some((i) => i.type === 'recent' && i.title === 'vexa rocks'), 'recent search suggested: ' + JSON.stringify(recent.items.map((i) => i.type + ':' + i.title)));
+    const sw = await cmd('suggest', { text: 'first party' });
+    assert(sw.items.some((i) => i.type === 'tab'), 'switch-to-tab suggested');
+  });
+
+  await check('Atmosphere: preset applies look + sounds; sounds play for tab events and typing; imported sound validated', async () => {
+    await chrome.key('t', { ctrl: true });
+    const ntp = await tabTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
+    await waitFor(() => ntp.eval('!!window.vexa'), { label: 'ntp api' });
+    await ntp.eval(`vexa.call('atmosphere.preset', 'arcade')`);
+    await waitFor(async () => {
+      const s = await state();
+      return s.look.palette === 'arcade' && s.look.effect === 'stars' && s.sounds.enabled && s.sounds.profile === 'arcade';
+    }, { label: 'arcade look + sounds in state' });
+    assert(await chrome.eval(`document.documentElement.dataset.palette === 'arcade' && getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() === '#ff4fa3'`), 'browser UI recolored');
+    await waitFor(() => readSettings().newTab.wallpaper.id === 'ember', { label: 'preset set the wallpaper (saved)' });
+    await chrome.eval(`window.__vexaSoundLog.length = 0`);
+    await chrome.key('t', { ctrl: true });
+    await sleep(300);
+    await chrome.key('w', { ctrl: true });
+    await waitFor(() => chrome.eval(`window.__vexaSoundLog.includes('tabOpen') && window.__vexaSoundLog.includes('tabClose')`), { label: 'tab sounds played' });
+    await chrome.key('t', { ctrl: true }); // keep the New Tab page above for the import part
+    await sleep(200);
+    await typeAndGo(site + '/contact');
+    await waitFor(async () => (await active()).title === 'Contact', { label: 'contact page' });
+    const page = await visibleTarget((u) => u.endsWith('/contact'), 'contact');
+    await page.click('#fn');
+    await page.key('a');
+    await waitFor(() => chrome.eval(`window.__vexaSoundLog.includes('typing') && window.__vexaSoundLog.includes('click') && window.__vexaSoundLog.includes('pageLoad')`), { label: 'typing, click and page-load sounds' });
+    page.close();
+    // Import a real WAV (decoded by the page first), assign it, and reject a non-audio file.
+    const wav = (() => {
+      const rate = 8000;
+      const n = rate / 5;
+      const b = Buffer.alloc(44 + n * 2);
+      b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVE', 8); b.write('fmt ', 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+      for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(Math.sin((i / rate) * 2 * Math.PI * 660) * 12000), 44 + i * 2);
+      return b.toString('base64');
+    })();
+    const saved = await ntp.eval(`(async () => {
+      const bytes = Uint8Array.from(atob(${JSON.stringify(wav)}), (c) => c.charCodeAt(0));
+      const eng = new VexaSoundEngine({});
+      const info = await eng.probe(bytes);
+      return vexa.call('atmosphere.saveSound', 'Blip.wav', bytes, info.duration);
+    })()`);
+    assert(saved.ext === 'wav' && Math.abs(saved.duration - 0.2) < 0.02, 'wav imported: ' + JSON.stringify(saved));
+    let bad = '';
+    try {
+      await ntp.eval(`vexa.call('atmosphere.saveSound', 'evil.mp3', new TextEncoder().encode('<script>alert(1)</script>'))`);
+    } catch (e) {
+      bad = e.message;
+    }
+    assert(/Use an MP3, WAV/.test(bad), 'non-audio rejected');
+    await ntp.eval(`vexa.call('atmosphere.set', { sounds: { categories: { tabOpen: { custom: ${JSON.stringify(saved.id)} } } } })`);
+    await waitFor(async () => (await state()).sounds.categories.tabOpen.custom === saved.id, { label: 'custom sound assigned' });
+    const bytes = await cmd('atmo-sound-bytes', { id: saved.id });
+    assert(bytes && Object.keys(bytes).length > 1000, 'browser UI can fetch the imported sound');
+    // Imported sounds are never served on a URL.
+    const status = await ntp.eval(`fetch('vexa://newtab/atmosphere-sounds/${saved.id}.wav').then((r) => r.status).catch(() => 0)`);
+    assert(status !== 200, 'not reachable by URL');
+    await ntp.eval(`vexa.call('atmosphere.removeSound', ${JSON.stringify(saved.id)})`);
+    await waitFor(async () => (await state()).sounds.categories.tabOpen.custom === '', { label: 'removing the sound frees the category' });
+    await ntp.eval(`vexa.call('atmosphere.preset', 'vexa')`);
+    await waitFor(async () => (await state()).look.palette === 'vexa' && !(await state()).sounds.enabled, { label: 'back to Vexa' });
+    ntp.close();
+  });
+
+  await check('New Tab: Customize tabs, widgets, favorites, Space wallpaper', async () => {
+    await typeAndGo('vexa://newtab/#customize=layout');
+    const ntp = await visibleTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
+    await waitFor(() => ntp.eval(`!document.querySelector('#drawer').hidden && !document.querySelector('[data-pane=layout]').hidden && document.querySelectorAll('.wl-row').length === 7`), { label: 'drawer opened on the Layout tab' });
+    await ntp.eval(`vexa.call('ntp.addFavorite', { url: ${JSON.stringify(site + '/page2')}, title: 'Fav Two' })`);
+    await ntp.eval(`vexa.call('ntp.set', { layout: 'dashboard', recent: true, order: ['search', 'recent', 'favorites', 'shortcuts', 'collections', 'spaces', 'weather'] })`);
+    await waitFor(() => ntp.eval(`document.body.classList.contains('layout-dashboard') && [...document.querySelectorAll('#widgets > [data-widget]')].map((e) => e.dataset.widget).join() === 'search,recent,favorites,shortcuts,collections,spaces,weather' && !document.querySelector('[data-widget=recent]').hidden && document.querySelector('#favorites .tile-title').textContent === 'Fav Two'`), { label: 'dashboard layout, order and favorite' });
+    // A wallpaper for the current Space only.
+    const sp = await ntp.eval(`vexa.call('spaces.list')`);
+    const space = sp.spaces.find((x) => x.id === sp.tabSpace);
+    await ntp.eval(`vexa.call('spaces.update', ${JSON.stringify(space.id)}, { look: { wallpaper: { kind: 'gallery', id: 'tide' } } })`);
+    await waitFor(async () => (await ntp.eval(`vexa.call('ntp.get')`)).current?.id === 'tide', { label: 'Space wallpaper' });
+    await ntp.eval(`vexa.call('ntp.set', { layout: 'centered', recent: false, favoritesList: [], order: ['search', 'favorites', 'shortcuts', 'recent', 'collections', 'spaces', 'weather'] })`);
+    ntp.close();
+  });
+
+  await check('Collections: create, save page + note + screenshot, files served, search, page renders; reader page sandboxed', async () => {
+    await typeAndGo(site + '/article');
+    await waitFor(async () => (await active()).title === 'Reader Test Article', { label: 'article' });
+    await chrome.key('t', { ctrl: true });
+    const ntp = await tabTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
+    await waitFor(() => ntp.eval('!!window.vexa'), { label: 'api' });
+    const c = await ntp.eval(`vexa.call('collections.create', { name: 'E2E Library', description: 'test' })`);
+    await ntp.eval(`vexa.call('collections.addItem', ${JSON.stringify(c.id)}, { type: 'link', url: ${JSON.stringify(site + '/article')}, title: 'Reader Test Article' })`);
+    await ntp.eval(`vexa.call('collections.addItem', ${JSON.stringify(c.id)}, { type: 'note', note: 'Remember the zebra', title: 'Remember the zebra' })`);
+    const png = await ntp.eval(`(async () => { const cv = document.createElement('canvas'); cv.width = 40; cv.height = 30; cv.getContext('2d').fillRect(0, 0, 40, 30); const b = await new Promise((r) => cv.toBlob(r, 'image/png')); return vexa.call('collections.addFileData', ${JSON.stringify(c.id)}, 'pic.png', new Uint8Array(await b.arrayBuffer())); })()`);
+    assert(png.type === 'image' && /^[a-f0-9]{16}\.png$/.test(png.file), 'image stored: ' + JSON.stringify(png));
+    const found = await ntp.eval(`vexa.call('collections.search', 'zebra')`);
+    assert(found.some((r) => r.item && r.item.title === 'Remember the zebra'), 'search finds the note');
+    ntp.close();
+    // Screenshot of the article tab into the collection, from the browser.
+    await chrome.key('w', { ctrl: true });
+    await waitFor(async () => (await active()).title === 'Reader Test Article', { label: 'back on the article' });
+    await cmd('action', { action: 'screenshot' });
+    await waitFor(() => JSON.parse(fs.readFileSync(path.join(profile, 'collections.json'), 'utf8')).collections.find((x) => x.id === c.id).items.some((i) => i.type === 'screenshot'), { label: 'screenshot saved', timeout: 6000 });
+    // Reader view.
+    await chrome.key('F9', { vk: 120 });
+    await waitFor(async () => (await active()).url.startsWith('vexa://reader/'), { label: 'reader opened' });
+    const rd = await visibleTarget((u) => u.startsWith('vexa://reader/'), 'reader');
+    await waitFor(() => rd.eval(`document.querySelector('.rd-article h1')?.textContent === 'The Reader Test Article'`), { label: 'reader title' });
+    const r = await rd.eval(`({ paras: document.querySelectorAll('.rd-article p').length, ad: document.body.textContent.includes('BUY NOW'), menu: document.body.textContent.includes('Menu link'), scripts: document.querySelectorAll('.rd-article script').length, pwned: !!window.__pwned || !!window.__inArticle, bad: [...document.querySelectorAll('.rd-article a')].some((a) => a.href.startsWith('javascript')), handlers: [...document.querySelectorAll('.rd-article *')].some((e) => [...e.attributes].some((a) => a.name.startsWith('on'))), byline: document.querySelector('.rd-meta').textContent })`);
+    assert(r.paras >= 14 && !r.ad && !r.menu && !r.scripts && !r.pwned && !r.bad && !r.handlers && r.byline.includes('Test Author'), 'reader content: ' + JSON.stringify(r));
+    let denied = '';
+    try {
+      await rd.eval(`vexa.call('settings.get')`);
+    } catch (e) {
+      denied = e.message;
+    }
+    assert(/Not allowed/.test(denied), 'reader page only gets reader.* calls');
+    await rd.eval(`vexa.call('reader.leave')`);
+    await waitFor(async () => (await active()).url === site + '/article', { label: 'left reader' });
+    rd.close();
+    // The collections page renders the collection.
+    await typeAndGo(`vexa://collections/#c=${c.id}`);
+    const cp = await visibleTarget((u) => u.startsWith('vexa://collections'), 'collections page');
+    await waitFor(() => cp.eval(`document.querySelectorAll('#items .item').length === 4 && document.querySelector('#col-name').value === 'E2E Library'`), { label: 'collection page lists 4 items' });
+    // Files are served (same origin as the page) only under their exact stored names.
+    const served = await cp.eval(`Promise.all(['vexa://collections/files/${png.file}', 'vexa://collections/files/0123456789abcdef.png', 'vexa://collections/files/../collections.json'].map((u) => fetch(u).then((r) => r.status + ' ' + r.headers.get('content-type'))))`);
+    assert(served[0] === '200 image/png' && served[1].startsWith('404') && served[2].startsWith('404'), 'files: ' + served);
+    assert(await cp.eval(`[...document.querySelectorAll('#items img')].some((i) => i.complete && i.naturalWidth === 40)`), 'image item rendered');
+    cp.close();
+  });
+
+  await check('Focus: session gets its own Space, holds back distracting sites, allow-for-5-min, ends back where it started', async () => {
+    await typeAndGo(site + '/page2');
+    await waitFor(async () => (await active()).title === 'Second Page', { label: 'page2' });
+    const from = (await state()).spaceId;
+    await chrome.key('t', { ctrl: true });
+    const ntp = await tabTarget((u) => u.startsWith('vexa://newtab'), 'ntp');
+    await waitFor(() => ntp.eval('!!window.vexa'), { label: 'api' });
+    await ntp.eval(`vexa.call('settings.set', 'focus', { blocklist: ['vexa-e2e-cdn.net'] })`);
+    ntp.close();
+    await chrome.key('w', { ctrl: true });
+    await cmd('focus', { op: 'start', name: 'E2E task', minutes: 25, blockDistractions: true, minimal: true, bringTab: true });
+    await waitFor(async () => {
+      const s = await state();
+      return s.focus && s.focus.active && s.focus.minimal && s.spaces.some((x) => x.id === s.spaceId && x.name === 'Focus: E2E task') && s.tabs.some((t) => t.title === 'Second Page');
+    }, { label: 'focus Space with the tab' });
+    assert(await chrome.eval(`document.body.classList.contains('minimal') && !document.querySelector('#focus-chip').hidden`), 'minimal UI + timer chip');
+    const p = srv.address().port;
+    // The page has keyboard focus now; focus the address bar like Ctrl+L does before typing.
+    await cmd('action', { action: 'focus-address' });
+    await sleep(200);
+    await typeAndGo(`http://static.vexa-e2e-cdn.net:${p}/page2`);
+    await waitFor(async () => (await active()).error?.code === 'focus', { label: 'distraction held back' });
+    assert(await chrome.eval(`!document.querySelector('#panel').hidden && document.querySelector('#panel-title').textContent === 'Stay focused'`), 'stay-focused panel');
+    await cmd('focus', { op: 'allow' });
+    await waitFor(async () => {
+      const t = await active();
+      return !t.error && t.title === 'Second Page';
+    }, { label: 'allowed for 5 minutes' });
+    await cmd('focus', { op: 'stop', outcome: 'return' });
+    await waitFor(async () => {
+      const s = await state();
+      return !s.focus && s.spaceId === from && !s.spaces.some((x) => x.name.startsWith('Focus:')) && s.tabs.some((t) => t.title === 'Second Page');
+    }, { label: 'session ended, tabs back' });
   });
 
   chrome.close();

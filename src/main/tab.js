@@ -38,11 +38,12 @@ class Tab {
    * @param {object} [opts.restore]        { entries, index, title, favicon } from a saved session
    * @param {boolean} [opts.lazy]          defer loading until the tab is first shown
    */
-  constructor(win, { url, webContents, restore, lazy = false } = {}) {
+  constructor(win, { url, webContents, restore, lazy = false, session = null } = {}) {
     this.id = nextTabId++;
     this.win = win;
     this.isPrivate = win.isPrivate;
-    this.view = webContents ? new WebContentsView({ webContents }) : new WebContentsView({ webPreferences: tabWebPreferences(win.session) });
+    this.spaceId = null; // set by the window (Spaces)
+    this.view = webContents ? new WebContentsView({ webContents }) : new WebContentsView({ webPreferences: tabWebPreferences(session || win.session) });
     this.view.setBackgroundColor('#ffffff');
     this.wc = this.view.webContents;
 
@@ -94,8 +95,23 @@ class Tab {
     return this.url === NEWTAB_URL || this.url === 'vexa://newtab';
   }
 
+  /** The "Stay focused" panel for a site a focus session holds back (nothing is loaded). */
+  _showFocusBlock(url) {
+    this.error = { code: 'focus', description: 'VEXA_FOCUS_DISTRACTION', url };
+    this.url = url;
+    this.loading = false;
+    try {
+      this.title = new URL(url).host;
+    } catch {
+      this.title = url;
+    }
+    this.win.layout();
+    this.changed();
+  }
+
   loadURL(url) {
     this.pending = null;
+    if (require('./focus').focus.blocks(this, url)) return this._showFocusBlock(url);
     this.error = null;
     this.crashed = null;
     this.url = url;
@@ -114,6 +130,9 @@ class Tab {
     shields.attachTab(wc, { isPrivate: this.isPrivate, session: wc.session, onChange: () => this.changed() });
     wc.on('input-event', (_e, input) => {
       if (GESTURES.has(input.type) && !(input.type.endsWith('KeyDown') && ['Escape', 'Control', 'Shift', 'Alt', 'Meta'].includes(input.key))) this.lastGesture = Date.now();
+      // Atmosphere: typing and click sounds (played by the browser UI, never in the page).
+      if (input.type === 'rawKeyDown' && !input.isAutoRepeat && !input.control && !input.meta && (input.key.length === 1 || input.key === 'Enter' || input.key === 'Backspace')) this.win.sound('typing');
+      else if (input.type === 'mouseDown') this.win.sound('click');
     });
 
     wc.on('did-start-loading', () => {
@@ -121,11 +140,24 @@ class Tab {
       this.changed();
     });
     wc.on('did-stop-loading', () => {
+      const was = this.loading;
       this.loading = false;
       if (!this.title) this.title = this._entryTitle(wc.getURL());
       this._syncZoom();
+      if (was && !this.error && this === this.win.activeTab && /^https?:/i.test(this.url)) this.win.sound('pageLoad');
+      require('./reader').reader.afterLoad(this);
       this.changed();
     });
+
+    // Focus sessions: hold back distracting sites before the navigation starts (links, scripts, redirects).
+    const focusGuard = (e, url, isMainFrame = true) => {
+      if (isMainFrame && require('./focus').focus.blocks(this, url)) {
+        e.preventDefault();
+        this._showFocusBlock(url);
+      }
+    };
+    wc.on('will-navigate', (e) => focusGuard(e, e.url, e.isMainFrame));
+    wc.on('will-redirect', (e) => focusGuard(e, e.url, e.isMainFrame));
 
     wc.on('did-start-navigation', (details) => {
       if (!details.isMainFrame || details.isSameDocument) return;
@@ -281,6 +313,12 @@ class Tab {
       return { action: 'deny' };
     }
     this.lastGesture = 0; // one popup per click, like Chromium
+    // A distracting site opened as a new tab or window during a focus session: show the panel in a new tab.
+    if (require('./focus').focus.blocks(this, url)) {
+      const t = this.win.openInNewTab('about:blank', { opener: this });
+      t._showFocusBlock(url);
+      return { action: 'deny' };
+    }
     // Real popups (window.open with size features) get a small, plain window so
     // sign-in flows that rely on window.opener keep working.
     if (disposition === 'new-window' && features) {
@@ -291,7 +329,7 @@ class Tab {
           height: 680,
           autoHideMenuBar: true,
           backgroundColor: '#ffffff',
-          webPreferences: { ...tabWebPreferences(this.win.session) }
+          webPreferences: { ...tabWebPreferences(this.wc.session) }
         }
       };
     }
@@ -354,6 +392,7 @@ class Tab {
   // --- permissions ---
   addPermissionRequest(req) {
     this.permissionRequests.push(req);
+    if (this === this.win.activeTab) this.win.sound('notification');
     this.changed();
   }
 
@@ -372,6 +411,7 @@ class Tab {
     const kind = passwords.classify(origin, username, password);
     if (kind === 'same') return;
     this.passwordPrompt = { id: `pw-${this.id}-${Date.now()}`, origin, username, password, update: kind === 'update', navs: 0 };
+    this.win.sound('notification');
     this.changed();
   }
 

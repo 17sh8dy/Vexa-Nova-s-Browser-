@@ -468,6 +468,188 @@
     $('#drm-note').textContent = d.supported ? 'Protected video (Widevine): available in this build.' : 'Protected video (Widevine): not in this build — see the README to enable it.';
   }
 
+  // ================================================================== 0.90
+  const cleanErr = (e) => String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+
+  // ---- Appearance: Atmosphere summary + sidebar
+  async function loadAppearance() {
+    const a = await call('atmosphere.get');
+    const preset = a.presets.find((p) => p.id === a.config.preset);
+    $('#atmo-summary').textContent = `${preset ? preset.name + ' preset' : 'Custom'} · ${a.palettes.find((p) => p.id === a.config.palette)?.name || 'Vexa'} colors · sounds ${a.config.sounds.enabled ? 'on' : 'off'}`;
+    $('#sb-show').checked = a.sidebar.show;
+  }
+  $('#sb-show').addEventListener('change', (e) => call('sidebar.set', { show: e.target.checked }));
+
+  // ---- Spaces
+  async function loadSpaces() {
+    const d = await call('spaces.list');
+    $('#spaces-list').innerHTML = d.spaces
+      .map((sp, i) => `<div class="list-row space-row" data-id="${esc(sp.id)}">
+        <span class="sp-badge" style="--sp:${esc(sp.color)}">${window.VexaSpaceIcon(sp.icon).replace('width="18" height="18"', 'width="15" height="15"')}</span>
+        <input class="sp-name-in" value="${esc(sp.name)}" maxlength="40" aria-label="Name" />
+        <select class="sp-icon-in" aria-label="Icon">${d.meta.icons.map((ic) => `<option ${ic === sp.icon ? 'selected' : ''}>${ic}</option>`).join('')}</select>
+        <select class="sp-color-in" aria-label="Color">${d.meta.colors.map((c) => `<option value="${c}" ${c === sp.color ? 'selected' : ''}>${c}</option>`).join('')}</select>
+        <label class="mini"><input type="checkbox" class="sp-iso-in" ${sp.isolated ? 'checked' : ''}/> Isolated</label>
+        <span class="muted">${sp.id === d.current ? 'Current' : ''}</span>
+        <button class="ibtn" data-sp="up" ${i === 0 ? 'disabled' : ''} title="Move up">${I.chevronUp}</button>
+        <button class="ibtn" data-sp="down" ${i === d.spaces.length - 1 ? 'disabled' : ''} title="Move down">${I.chevronDown}</button>
+        <button class="ibtn" data-sp="delete" ${d.spaces.length < 2 ? 'disabled' : ''} title="Delete">${I.trash}</button>
+      </div>`)
+      .join('');
+    $('#saved-list').innerHTML = d.saved.length
+      ? d.saved.map((x) => `<div class="list-row" data-saved="${esc(x.id)}"><div class="label"><b>${esc(x.name)}</b><small>${x.count} tab${x.count === 1 ? '' : 's'} · saved ${new Date(x.savedAt).toLocaleString()}</small></div><button class="btn small" data-sv="restore">Open</button><button class="ibtn" data-sv="delete" title="Delete">${I.trash}</button></div>`).join('')
+      : '<div class="row empty-row"><div class="label"><small>No saved sessions. Right-click a Space in the sidebar → “Save tabs as a session”.</small></div></div>';
+  }
+  $('#spaces-list').addEventListener('change', async (e) => {
+    const row = e.target.closest('[data-id]');
+    if (!row) return;
+    const patch = {};
+    if (e.target.matches('.sp-name-in')) patch.name = e.target.value;
+    if (e.target.matches('.sp-icon-in')) patch.icon = e.target.value;
+    if (e.target.matches('.sp-color-in')) patch.color = e.target.value;
+    if (e.target.matches('.sp-iso-in')) patch.isolated = e.target.checked;
+    try {
+      await call('spaces.update', row.dataset.id, patch);
+    } catch (err) {
+      toast(cleanErr(err));
+      loadSpaces();
+    }
+  });
+  $('#spaces-list').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-sp]');
+    if (!b) return;
+    const row = b.closest('[data-id]');
+    const rows = $$('#spaces-list [data-id]');
+    const i = rows.indexOf(row);
+    try {
+      if (b.dataset.sp === 'up') await call('spaces.move', row.dataset.id, i - 1);
+      if (b.dataset.sp === 'down') await call('spaces.move', row.dataset.id, i + 1);
+      if (b.dataset.sp === 'delete') {
+        if (b.dataset.armed !== '1') {
+          b.dataset.armed = '1';
+          b.classList.add('armed');
+          b.title = 'Click again to delete this Space (its tabs move to the first Space, or close if it is isolated)';
+          toast('Click the bin again to delete this Space');
+          return;
+        }
+        await call('spaces.remove', row.dataset.id);
+      }
+    } catch (err) {
+      toast(cleanErr(err));
+    }
+  });
+  $('#space-new').addEventListener('click', () => call('nav.commandCenter', 'new space'));
+  $('#saved-list').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-sv]');
+    if (!b) return;
+    const id = b.closest('[data-saved]').dataset.saved;
+    if (b.dataset.sv === 'restore') await call('spaces.restoreSaved', id);
+    else {
+      await call('spaces.removeSaved', id);
+      loadSpaces();
+    }
+  });
+  window.V.on('spaces', loadSpaces);
+
+  // ---- Search shortcuts + history
+  function renderShortcuts() {
+    $('#shortcuts-list').innerHTML = (s.searchShortcuts || [])
+      .map((sc, i) => `<div class="list-row sc-row" data-i="${i}"><span class="sc-at">@</span><input class="sc-key" value="${esc(sc.key)}" maxlength="12" aria-label="Keyword" /><input class="sc-name" value="${esc(sc.name)}" maxlength="60" aria-label="Name" /><input class="sc-url" value="${esc(sc.url)}" aria-label="Search address" spellcheck="false" /><button class="ibtn" data-sc="delete" title="Remove">${I.trash}</button></div>`)
+      .join('');
+  }
+  function readShortcuts() {
+    return $$('#shortcuts-list .sc-row').map((r) => ({ key: r.querySelector('.sc-key').value.trim().toLowerCase().replace(/^@/, ''), name: r.querySelector('.sc-name').value.trim(), url: r.querySelector('.sc-url').value.trim() }));
+  }
+  async function saveShortcuts(list) {
+    try {
+      await call('settings.set', 'searchShortcuts', list);
+      s.searchShortcuts = list;
+      renderShortcuts();
+    } catch {
+      toast('Check the shortcuts: keywords are letters/digits and unique, and each address must start with https:// and contain %s');
+    }
+  }
+  $('#shortcuts-list').addEventListener('change', () => saveShortcuts(readShortcuts()));
+  $('#shortcuts-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sc="delete"]');
+    if (!b) return;
+    const list = readShortcuts();
+    list.splice(Number(b.closest('[data-i]').dataset.i), 1);
+    saveShortcuts(list);
+  });
+  $('#sc-add').addEventListener('click', () => {
+    const list = readShortcuts();
+    let n = 1;
+    while (list.some((x) => x.key === 'new' + n)) n++;
+    saveShortcuts([...list, { key: 'new' + n, name: 'New shortcut', url: 'https://example.com/search?q=%s' }]);
+  });
+  $('#sc-reset').addEventListener('click', async () => {
+    await call('search.resetShortcuts');
+    s = await call('settings.get');
+    renderShortcuts();
+  });
+  async function loadSearchHistory() {
+    const items = await call('search.history');
+    $('#search-history').innerHTML = items.length
+      ? items.slice(0, 30).map((x) => `<div class="list-row" data-q="${esc(x.q)}"><div class="label"><b>${esc(x.q)}</b><small>${new Date(x.t).toLocaleString()}${x.n > 1 ? ` · ${x.n} times` : ''}</small></div><button class="ibtn" title="Forget">${I.close}</button></div>`).join('') + `<div class="row"><span class="grow"></span><button class="btn small" id="sh-clear">Clear all searches</button></div>`
+      : '<div class="row empty-row"><div class="label"><small>No searches remembered.</small></div></div>';
+  }
+  $('#search-history').addEventListener('click', async (e) => {
+    if (e.target.closest('#sh-clear')) await call('search.clearHistory');
+    else {
+      const row = e.target.closest('[data-q]');
+      if (row && e.target.closest('.ibtn')) await call('search.removeHistory', row.dataset.q);
+      else return;
+    }
+    loadSearchHistory();
+  });
+
+  // ---- Focus
+  function renderFocus() {
+    const f = s.focus;
+    if (!f) return;
+    for (const el of $$('[data-focus]')) el.checked = !!f[el.dataset.focus];
+    const sel = $('#focus-minutes');
+    if (![...sel.options].some((o) => Number(o.value) === f.defaultMinutes)) sel.insertAdjacentHTML('beforeend', `<option value="${f.defaultMinutes}">${f.defaultMinutes} minutes</option>`);
+    sel.value = String(f.defaultMinutes);
+    if (document.activeElement !== $('#focus-blocklist')) $('#focus-blocklist').value = f.blocklist.join('\n');
+    const sites = Object.entries(f.sitePrefs || {});
+    $('#focus-sites').innerHTML = sites.length
+      ? sites.map(([site, p]) => `<div class="list-row" data-site="${esc(site)}"><div class="label"><b>${esc(site)}</b></div><label class="mini"><input type="checkbox" data-sp-k="reader" ${p.reader ? 'checked' : ''}/> Always Reader view</label><label class="mini"><input type="checkbox" data-sp-k="allowInFocus" ${p.allowInFocus ? 'checked' : ''}/> Allowed during focus</label></div>`).join('')
+      : '<div class="row empty-row"><div class="label"><small>None yet. Turn on “Always on this site” in Reader view to add one.</small></div></div>';
+  }
+  const setFocus = async (patch) => {
+    try {
+      await call('settings.set', 'focus', patch);
+      s = await call('settings.get');
+      renderFocus();
+    } catch (err) {
+      toast('Could not save: ' + cleanErr(err));
+    }
+  };
+  for (const el of $$('[data-focus]')) el.addEventListener('change', () => setFocus({ [el.dataset.focus]: el.checked }));
+  $('#focus-minutes').addEventListener('change', (e) => setFocus({ defaultMinutes: Number(e.target.value) }));
+  $('#focus-blocklist').addEventListener('change', (e) => {
+    const list = [...new Set(e.target.value.split(/[\s,]+/).map((x) => x.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '')).filter((x) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(x)))];
+    setFocus({ blocklist: list });
+  });
+  $('#focus-sites').addEventListener('change', (e) => {
+    const row = e.target.closest('[data-site]');
+    const k = e.target.dataset.spK;
+    if (row && k) call('reader.sitePref', row.dataset.site, k, e.target.checked).then(async () => {
+      s = await call('settings.get');
+      renderFocus();
+    });
+  });
+
+  // ---- Compatibility
+  async function loadCompat() {
+    const c = await call('app.compat');
+    $('#compat-drm').textContent = c.widevine.build
+      ? `This is a Widevine-enabled build (castlabs Electron). CDM status: ${JSON.stringify(c.widevine.status)}. Netflix and similar services additionally need the packaged app to be VMP-signed.`
+      : `Not in this build. Stock Electron ${c.electron} ships without the Widevine CDM, so DRM-protected video (Netflix, Disney+, Prime Video, Spotify web) won't play. Developers can build with castlabs' Widevine-enabled Electron: npm run use-widevine (see docs/COMPATIBILITY.md).`;
+  }
+
   // ---- section highlighting / hash jumps
   function highlightHash() {
     const id = location.hash.slice(1);
@@ -485,10 +667,21 @@
   }
   window.addEventListener('hashchange', highlightHash);
 
-  window.V.on('settings', async () => {
+  window.V.on('settings', async (p) => {
     s = await call('settings.get');
     render();
+    if (!p || ['atmosphere', 'sidebar'].includes(p.key)) loadAppearance();
+    if (!p || p.key === 'searchShortcuts') renderShortcuts();
+    if (!p || p.key === 'focus') renderFocus();
   });
 
-  load().then(highlightHash);
+  load().then(() => {
+    loadAppearance();
+    loadSpaces();
+    renderShortcuts();
+    loadSearchHistory();
+    renderFocus();
+    loadCompat();
+    highlightHash();
+  });
 })();

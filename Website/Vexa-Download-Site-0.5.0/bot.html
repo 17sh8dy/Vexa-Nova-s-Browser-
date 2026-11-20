@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#09090c">
+  <meta name="description" content="VexaBot is the web crawler for Vexa Search, Nova's own search engine. What it does, how it behaves and how to control or block it.">
+  <title>VexaBot — the Vexa Search crawler</title>
+  <link rel="icon" type="image/svg+xml" href="assets/vexa-mark.svg">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="bot.css">
+</head>
+<body id="top">
+  <div class="page-glow page-glow--top" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner container">
+      <a class="brand" href="/" aria-label="Vexa home">
+        <img src="assets/vexa-mark.svg" alt="" width="34" height="34">
+        <span>vexa<span class="brand-period">.</span></span>
+      </a>
+    </div>
+  </header>
+
+  <main class="container bot-page">
+    <div class="eyebrow"><span class="eyebrow-dot"></span> VEXA SEARCH <span class="eyebrow-divider">/</span> FOR WEBSITE OWNERS</div>
+    <h1>VexaBot</h1>
+    <p class="bot-lede">VexaBot is the web crawler for <strong>Vexa Search</strong>, the search engine Nova is building from scratch for the Vexa browser. Vexa Search is in beta. VexaBot visits public web pages so they can be found in search results.</p>
+
+    <section>
+      <h2>How to recognise it</h2>
+      <p>VexaBot sends this user agent with every request:</p>
+      <pre><code>Mozilla/5.0 (compatible; VexaBot/0.1; +https://vexa.shadylabs.workers.dev/bot)</code></pre>
+      <p>The robots.txt product token is <code>VexaBot</code>.</p>
+    </section>
+
+    <section>
+      <h2>How it behaves</h2>
+      <ul>
+        <li>It reads and obeys <code>robots.txt</code> (RFC 9309), including <code>Crawl-delay</code>, and re-reads it at least every 24 hours. If your robots.txt returns a server error, VexaBot stays away until it can read it.</li>
+        <li>It requests one page at a time from each site, at least 1.5 seconds apart.</li>
+        <li>It respects <code>noindex</code> and <code>nofollow</code> in <code>&lt;meta name="robots"&gt;</code> and <code>&lt;meta name="vexabot"&gt;</code>, the <code>X-Robots-Tag</code> header, and <code>rel="nofollow"</code> on links.</li>
+        <li>It downloads HTML only (up to 2&nbsp;MB per page), never submits forms, never logs in and never runs scripts.</li>
+        <li>It does not crawl adult or pornographic websites.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Block or slow VexaBot</h2>
+      <p>To keep VexaBot off your whole site, add this to your <code>robots.txt</code>:</p>
+      <pre><code>User-agent: VexaBot
+Disallow: /</code></pre>
+      <p>To keep it out of part of your site:</p>
+      <pre><code>User-agent: VexaBot
+Disallow: /private/</code></pre>
+      <p>To ask it to wait longer between requests (in seconds):</p>
+      <pre><code>User-agent: VexaBot
+Crawl-delay: 10</code></pre>
+      <p>To keep a single page out of results, add <code>&lt;meta name="vexabot" content="noindex"&gt;</code> to it.</p>
+    </section>
+
+    <section>
+      <h2>Questions or problems</h2>
+      <p>If VexaBot is causing trouble on your site, contact Nova through <a href="https://nova-help.shadylabs.workers.dev/" target="_blank" rel="noreferrer">Nova.Help ↗</a> or on <a href="https://discord.gg/XBhER9Z6EB" target="_blank" rel="noreferrer">Discord ↗</a>.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer container">
+    <a class="brand footer-brand" href="/"><img src="assets/vexa-mark.svg" alt="" width="30" height="30"><span>vexa<span class="brand-period">.</span></span></a>
+    <p>A Nova product. Built for the way you browse.</p>
+    <div class="footer-links"><a href="/">Vexa home</a><a href="https://nova-legal.shadylabs.workers.dev/" target="_blank" rel="noreferrer">NovaLegal ↗</a><a href="https://discord.gg/XBhER9Z6EB" target="_blank" rel="noreferrer">Discord ↗</a></div>
+    <div class="footer-bottom"><span>© 2026 Nova. All rights reserved.</span><span>VexaBot 0.1</span></div>
+  </footer>
+</body>
+</html>

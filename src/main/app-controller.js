@@ -65,6 +65,11 @@ function createWindow(opts = {}) {
   return w;
 }
 
+/** Is `w` the last open window (so closing it ends the app)? */
+function isLastWindow(w) {
+  return !quitting && [...windows].filter((x) => !x.closing && !x.win.isDestroyed()).length === 1 && windows.has(w);
+}
+
 function focusedWindow() {
   const bw = BrowserWindow.getFocusedWindow();
   return [...windows].find((w) => w.win === bw) || (lastFocused && !lastFocused.win.isDestroyed() ? lastFocused : null);
@@ -82,7 +87,7 @@ function openUrls(urls) {
 function windowForWebContents(wc) {
   for (const w of windows) {
     if (w.chrome === wc || w.overlay.webContents === wc || w.status.webContents === wc) return { win: w, tab: null };
-    const tab = w.tabs.find((t) => t.wc === wc);
+    const tab = w.allTabs().find((t) => t.wc === wc);
     if (tab) return { win: w, tab };
   }
   return { win: null, tab: null };
@@ -96,14 +101,17 @@ function startup(urls = []) {
     saved.forEach((restore) => createWindow({ restore }));
     if (urls.length) openUrls(urls);
   } else {
-    createWindow({ urls: urls.length ? urls : [mode === 'home' ? settings.homeUrl() : NEWTAB_URL] });
+    createWindow({ urls: urls.length ? urls : mode === 'home' ? [settings.homeUrl()] : [] });
   }
+  // Atmosphere: the startup sound, once the first browser UI has loaded.
+  const first = lastFocused;
+  if (first) first.chrome.once('did-finish-load', () => setTimeout(() => first.sound('startup'), 150));
 }
 
 // ------------------------------------------------------------------ fan-out
 function broadcastInternal(event, payload) {
   for (const w of windows) {
-    for (const t of w.tabs) {
+    for (const t of w.allTabs()) {
       if (!t.wc.isDestroyed() && isInternal(t.wc.getURL())) t.wc.send('vexa:event', event, payload);
     }
   }
@@ -115,19 +123,49 @@ function refreshAllChrome() {
 
 let historyTimer = null;
 function wireDataEvents() {
+  const { spaces } = require('./spaces');
+  const { atmosphere } = require('./atmosphere');
+  spaces.on('changed', () => {
+    for (const w of windows) {
+      w._applyTheme();
+      w.sendState();
+    }
+    broadcastInternal('spaces');
+  });
+  spaces.on('removed', (removed, fallback) => {
+    for (const w of windows) if (!w.isPrivate) w.spaceRemoved(removed, fallback);
+  });
+  atmosphere.on('sounds-changed', () => broadcastInternal('atmosphere-sounds'));
+  try {
+    const { collections } = require('./collections');
+    collections.on('changed', () => {
+      for (const w of windows) {
+        if (w.research.open) w.sendState();
+        if (w.popup?.kind === 'collect') w.updatePopup('collect', w.collectData());
+      }
+      broadcastInternal('collections');
+    });
+  } catch (err) {
+    console.error('[vexa] collections:', err.message);
+  }
   require('./shields').shields.on('changed', () => {
     for (const w of windows) w.updatePopup('shields', w.shieldsData());
     refreshAllChrome();
   });
   settings.on('changed', (key, value) => {
     if (key === 'theme') nativeTheme.themeSource = value;
+    if (key === 'atmosphere' || key === 'newTab') {
+      for (const w of windows) w._applyTheme();
+      broadcastInternal('atmosphere', atmosphereLook());
+    }
+    if (key === 'commandCenterKey') require('./shortcuts').setCommandKey(value);
     if (key === 'shields' || key === 'shieldsSites') for (const w of windows) w.updatePopup('shields', w.shieldsData());
     refreshAllChrome();
     broadcastInternal('settings', { key, value });
   });
   bookmarks.on('changed', () => {
     for (const w of windows) {
-      for (const t of w.tabs) t.changed();
+      for (const t of w.allTabs()) t.changed();
     }
     refreshAllChrome();
     broadcastInternal('bookmarks');
@@ -146,11 +184,17 @@ function wireDataEvents() {
     }
     broadcastInternal('downloads');
   });
+  // Atmosphere: a finished download is a notification.
+  downloads.on('done', (record) => {
+    if (record.state !== 'completed') return;
+    const w = focusedWindow();
+    if (w) w.sound('notification');
+  });
   downloads.on('started', (_record, wc) => {
     const { win, tab } = wc ? windowForWebContents(wc) : { win: focusedWindow(), tab: null };
     const target = win || focusedWindow();
     // A link that opened a blank tab just to download: close that tab.
-    if (tab && target && target.tabs.length > 1) {
+    if (tab && target && target.allTabs().length > 1) {
       let entries = 0;
       try {
         entries = tab.wc.navigationHistory.length();
@@ -183,9 +227,28 @@ function wireDataEvents() {
   });
 }
 
+/** The global look (no Space overrides) for vexa:// pages that don't belong to a window. */
+function atmosphereLook() {
+  return require('./atmosphere').atmosphere.look(null);
+}
+
 // ------------------------------------------------------------------ quit
+let shutdownSoundDone = false;
 async function onBeforeQuit(event) {
   if (quitting) return;
+  // Atmosphere: play the shutdown sound before the windows go away.
+  if (!shutdownSoundDone) {
+    shutdownSoundDone = true;
+    const w = focusedWindow();
+    if (w && !w.win.isDestroyed() && w.soundOn('shutdown')) {
+      event.preventDefault();
+      for (const x of windows) x._shutdownPlayed = true;
+      w.sound('shutdown');
+      setTimeout(() => app.quit(), 650);
+      return;
+    }
+  }
+  for (const x of windows) x._shutdownPlayed = true;
   clearTimeout(saveTimer);
   saveSessionNow();
   quitting = true;
@@ -215,6 +278,8 @@ module.exports = {
   windows,
   createWindow,
   focusedWindow,
+  isLastWindow,
+  atmosphereLook,
   openUrls,
   windowForWebContents,
   startup,

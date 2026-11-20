@@ -7,15 +7,19 @@ const { settings } = require('./settings');
 const { history } = require('./history');
 const { bookmarks, ROOTS } = require('./bookmarks');
 const { downloads } = require('./downloads');
-const { resolveInput, NEWTAB_URL, SEARCH_ENGINES, displayUrl, hostOf, siteOf } = require('./url');
+const { resolveInput, NEWTAB_URL, SEARCH_ENGINES, displayUrl, hostOf, siteOf, parseKeyword, fillTemplate } = require('./url');
 const { shields } = require('./shields');
 const { actionFor } = require('./shortcuts');
 const { defaultSession, newPrivateSession } = require('./sessions');
+const { spaces } = require('./spaces');
+const { atmosphere } = require('./atmosphere');
+const palettes = require('../renderer/shared/palettes');
 
 const CHROME_PRELOAD = path.join(__dirname, '..', 'preload', 'chrome.js');
 const RENDERER = path.join(__dirname, '..', 'renderer');
 const TAB_STRIP_HEIGHT = 40;
 const isMac = process.platform === 'darwin';
+const PRIVATE_SPACE = 'private';
 
 const THEME = {
   dark: { strip: '#0e0c15', symbol: '#d9d2f2' },
@@ -38,10 +42,17 @@ class VexaWindow extends EventEmitter {
     this.id = nextWindowId++;
     this.isPrivate = isPrivate;
     this.session = isPrivate ? newPrivateSession() : defaultSession();
-    this.tabs = [];
+    // Spaces: every Space has its own ordered tab list in this window. `this.tabs` is the
+    // current Space's list; allTabs() is every tab in the window.
+    this.spaceTabs = new Map();
+    this.spaceActive = new Map(); // spaceId -> id of the tab last shown in it
+    this.spaceId = isPrivate ? PRIVATE_SPACE : restore?.spaceId && spaces.get(restore.spaceId) ? restore.spaceId : spaces.first().id;
     this.activeTab = null;
     this.closedTabs = [];
-    this.layoutInfo = { chromeHeight: 84, toolbarBottom: 84 };
+    this.focusSession = null; // see focus.js
+    this.research = { open: false, collectionId: null };
+    this.layoutInfo = { chromeHeight: 84, toolbarBottom: 84, insetLeft: 0, insetRight: 0 };
+    this._ready = false;
     this.popup = null; // { kind, ... }
     this.closing = false;
     this._stateQueued = false;
@@ -68,6 +79,8 @@ class VexaWindow extends EventEmitter {
         contextIsolation: true,
         nodeIntegration: false,
         spellcheck: false,
+        autoplayPolicy: 'no-user-gesture-required', // Atmosphere sounds play without a click first
+        backgroundThrottling: false,
         additionalArguments: [`--vexa-role=chrome`]
       }
     });
@@ -100,6 +113,7 @@ class VexaWindow extends EventEmitter {
       if (action && this.handleShortcut(action, null)) event.preventDefault();
     });
     this.overlay.webContents.on('will-navigate', (e) => e.preventDefault());
+    this.overlay.webContents.on('did-finish-load', () => this._sendLook());
     this.overlayAttached = false;
 
     // Status bubble (link hover URL) in the bottom-left corner.
@@ -108,6 +122,7 @@ class VexaWindow extends EventEmitter {
     });
     this.status.setBackgroundColor('#00000000');
     this.status.webContents.loadFile(path.join(RENDERER, 'overlay', 'index.html'), { query: { mode: 'status', private: isPrivate ? '1' : '0' } });
+    this.status.webContents.on('did-finish-load', () => this._sendLook());
     this.statusAttached = false;
     this.statusTimer = null;
 
@@ -124,13 +139,23 @@ class VexaWindow extends EventEmitter {
     });
     this.win.on('blur', () => this.hidePopup());
     this.win.once('ready-to-show', () => this.win.show());
-    this.win.on('close', () => {
+    this.win.on('close', (e) => {
+      // Atmosphere: let the shutdown sound play when the last window closes.
+      const app = require('./app-controller');
+      if (!this._shutdownPlayed && !this.closing && app.isLastWindow(this) && this.soundOn('shutdown')) {
+        e.preventDefault();
+        this._shutdownPlayed = true;
+        this.sound('shutdown');
+        setTimeout(() => !this.win.isDestroyed() && this.win.close(), 650);
+        return;
+      }
       this.emit('closing', this);
       this.closing = true;
     });
     this.win.on('closed', () => {
-      for (const t of this.tabs) t.destroy();
-      this.tabs = [];
+      require('./focus').focus.stop(this, { silent: true });
+      for (const t of this.allTabs()) t.destroy();
+      this.spaceTabs.clear();
       for (const v of [this.overlay, this.status]) {
         try {
           v.webContents.close();
@@ -147,7 +172,10 @@ class VexaWindow extends EventEmitter {
 
     // Initial tabs
     if (transferTab) {
+      this.spaceId = transferTab.spaceId && spaces.get(transferTab.spaceId) ? transferTab.spaceId : this.spaceId;
       this.receiveTab(transferTab, 0);
+    } else if (restore?.spaces && !isPrivate) {
+      this._restoreSpaces(restore);
     } else if (restore?.tabs?.length) {
       const active = Math.min(restore.activeIndex || 0, restore.tabs.length - 1);
       const restored = restore.tabs.map((t, i) => this.addTab({ restore: t, lazy: i !== active, activate: false }));
@@ -155,14 +183,149 @@ class VexaWindow extends EventEmitter {
     } else if (urls.length) {
       urls.forEach((u, i) => this.addTab({ url: u, activate: i === 0 }));
     } else {
-      this.addTab({ url: NEWTAB_URL });
+      this._openStartup(this.spaceId);
     }
+    this._ready = true;
+  }
+
+  /** Session restore (0.90 format): tabs per Space, each Space's last-shown tab. */
+  _restoreSpaces(restore) {
+    const fallback = spaces.first();
+    for (const [sid, entry] of Object.entries(restore.spaces)) {
+      if (!entry || !Array.isArray(entry.tabs) || !entry.tabs.length) continue;
+      let target = spaces.get(sid) ? sid : null;
+      // A Space deleted since: its tabs join the first Space, unless that would put them in another session.
+      if (!target && !fallback.isolated) target = fallback.id;
+      if (!target) continue;
+      const added = entry.tabs.map((t) => this.addTab({ restore: t, lazy: true, activate: false, spaceId: target }));
+      const ai = Math.min(Math.max(0, entry.activeIndex || 0), added.length - 1);
+      this.spaceActive.set(target, added[ai].id);
+    }
+    const list = this.tabs;
+    if (!list.length) return this._openStartup(this.spaceId);
+    const remembered = this.getTab(this.spaceActive.get(this.spaceId));
+    this.activateTab((remembered || list[0]).id);
+  }
+
+  // ---------------------------------------------------------------- spaces
+  /** The tab list of one Space in this window (created on first use). */
+  _list(spaceId) {
+    let list = this.spaceTabs.get(spaceId);
+    if (!list) {
+      list = [];
+      this.spaceTabs.set(spaceId, list);
+    }
+    return list;
+  }
+
+  /** The current Space's tabs, in strip order. */
+  get tabs() {
+    return this._list(this.spaceId);
+  }
+
+  /** Every tab in this window, in every Space. */
+  allTabs() {
+    const out = [];
+    for (const list of this.spaceTabs.values()) out.push(...list);
+    return out;
+  }
+
+  get space() {
+    return this.isPrivate ? null : spaces.get(this.spaceId);
+  }
+
+  /** Open a Space's startup pages (or a New Tab) in this window. */
+  _openStartup(spaceId) {
+    const s = this.isPrivate ? null : spaces.get(spaceId);
+    const urls = s && s.startup.mode === 'urls' && s.startup.urls.length ? s.startup.urls : [NEWTAB_URL];
+    urls.forEach((u, i) => this.addTab({ url: u, activate: i === 0, spaceId }));
+  }
+
+  /** Show another Space in this window. */
+  switchSpace(id, { tabId = null } = {}) {
+    if (this.isPrivate || !spaces.get(id)) return false;
+    if (id === this.spaceId && !tabId) return true;
+    const prev = this.activeTab;
+    if (prev) {
+      if (prev.attached) this._detachTab(prev);
+      this.spaceActive.set(this.spaceId, prev.id);
+    }
+    const changed = id !== this.spaceId;
+    this.spaceId = id;
+    this.activeTab = null;
+    this.hidePopup();
+    if (!this.tabs.length) {
+      this._openStartup(id);
+    } else {
+      const want = this.getTab(tabId) || this.getTab(this.spaceActive.get(id)) || this.tabs[this.tabs.length - 1];
+      this._quietSwitch = true;
+      this.activateTab(want.id);
+      this._quietSwitch = false;
+    }
+    if (changed) {
+      this._applyTheme();
+      this.sound('tabSwitch');
+      if (!this.chrome.isDestroyed()) this.chrome.send('space-switched', id);
+    }
+    this.emit('tabs-changed');
+    return true;
+  }
+
+  /** A Space was deleted: its tabs move to `fallback` (same session) or close. */
+  spaceRemoved(removed, fallback) {
+    const list = this.spaceTabs.get(removed.id) || [];
+    this.spaceTabs.delete(removed.id);
+    this.spaceActive.delete(removed.id);
+    const canMove = !removed.isolated && !fallback.isolated;
+    for (const t of list) {
+      if (canMove) {
+        t.spaceId = fallback.id;
+        this._list(fallback.id).push(t);
+      } else {
+        if (t === this.activeTab) {
+          this._detachTab(t);
+          this.activeTab = null;
+        }
+        t.destroy();
+      }
+    }
+    if (this.spaceId === removed.id) {
+      this.spaceId = fallback.id;
+      this.activeTab = null;
+      if (!this.tabs.length) this._openStartup(fallback.id);
+      else this.activateTab((this.getTab(this.spaceActive.get(fallback.id)) || this.tabs[0]).id);
+    }
+    this._applyTheme();
+    this.sendState();
+    this.emit('tabs-changed');
+  }
+
+  // ---------------------------------------------------------------- Atmosphere sounds
+  soundOn(category) {
+    const s = settings.get('atmosphere').sounds;
+    if (!s.enabled || !s.categories[category]?.on) return false;
+    if (this.focusSession && settings.get('focus').quietSounds) return false;
+    return true;
+  }
+
+  /** Ask this window's browser UI to play an interface sound. */
+  sound(category) {
+    if (!this.soundOn(category) || this.chrome.isDestroyed()) return;
+    this.chrome.send('atmo:play', category);
+  }
+
+  /** The look (palette, accent, motion, effect, wallpaper) for this window's current Space. */
+  look() {
+    return atmosphere.look(this.space, { isPrivate: this.isPrivate });
   }
 
   // ---------------------------------------------------------------- theme
   _titleBarColors() {
     if (this.isPrivate) return THEME.private;
-    return nativeTheme.shouldUseDarkColors ? THEME.dark : THEME.light;
+    const sysDark = nativeTheme.shouldUseDarkColors;
+    const { vars, dark } = palettes.resolve(this.look(), sysDark);
+    const base = dark ? THEME.dark : THEME.light;
+    return { strip: vars['--strip'] || base.strip, symbol: vars['--text-dim'] || base.symbol };
   }
 
   _applyTheme() {
@@ -184,13 +347,20 @@ class VexaWindow extends EventEmitter {
     return { width, height };
   }
 
+  /** Where tab pages go: under the browser UI, beside the sidebar / research panel. */
+  _tabBounds() {
+    const { width, height } = this.contentSize();
+    if (this._htmlFullscreenTab) return { x: 0, y: 0, width, height };
+    const top = Math.round(this.layoutInfo.chromeHeight);
+    const left = Math.round(this.layoutInfo.insetLeft || 0);
+    const right = Math.round(this.layoutInfo.insetRight || 0);
+    return { x: left, y: top, width: Math.max(0, width - left - right), height: Math.max(0, height - top) };
+  }
+
   layout() {
     if (this.win.isDestroyed()) return;
-    const { width, height } = this.contentSize();
-    const fsTab = this._htmlFullscreenTab;
-    const top = fsTab ? 0 : Math.round(this.layoutInfo.chromeHeight);
-    const bounds = { x: 0, y: top, width, height: Math.max(0, height - top) };
-    for (const t of this.tabs) t.view.setBounds(bounds);
+    const bounds = this._tabBounds();
+    for (const t of this.allTabs()) t.view.setBounds(bounds);
 
     // Hide the page while the browser UI shows an error/crash panel for it.
     const t = this.activeTab;
@@ -225,9 +395,11 @@ class VexaWindow extends EventEmitter {
     t.attached = false;
   }
 
-  setLayout({ chromeHeight, toolbarBottom }) {
+  setLayout({ chromeHeight, toolbarBottom, insetLeft, insetRight }) {
     if (typeof chromeHeight === 'number' && chromeHeight > 0) this.layoutInfo.chromeHeight = chromeHeight;
     if (typeof toolbarBottom === 'number' && toolbarBottom > 0) this.layoutInfo.toolbarBottom = toolbarBottom;
+    if (typeof insetLeft === 'number' && insetLeft >= 0 && insetLeft < 600) this.layoutInfo.insetLeft = insetLeft;
+    if (typeof insetRight === 'number' && insetRight >= 0 && insetRight < 900) this.layoutInfo.insetRight = insetRight;
     this.layout();
   }
 
@@ -245,7 +417,8 @@ class VexaWindow extends EventEmitter {
 
   // ---------------------------------------------------------------- status bubble
   setStatusUrl(tab, url) {
-    if (tab !== this.activeTab) return;
+    if (tab !== this.activeTab || this._toast) return; // a toast is using the layer
+
     clearTimeout(this.statusTimer);
     if (!url) {
       this.statusTimer = setTimeout(() => {
@@ -268,6 +441,12 @@ class VexaWindow extends EventEmitter {
 
   _positionStatus() {
     const { width, height } = this.contentSize();
+    if (this._toast) {
+      const b = this._tabBounds();
+      const w = Math.min(Math.max(220, b.width - 40), Math.round(this._toast.length * 7.4) + 56);
+      this.status.setBounds({ x: Math.round(b.x + (b.width - w) / 2), y: height - 64, width: w, height: 48 });
+      return;
+    }
     const w = Math.min(Math.round(width * 0.6), Math.max(120, Math.round((this.statusText || '').length * 6.6) + 28));
     this.status.setBounds({ x: 0, y: height - 28, width: w, height: 28 });
   }
@@ -277,13 +456,19 @@ class VexaWindow extends EventEmitter {
     return this.tabs.filter((t) => t.pinned).length;
   }
 
+  /** The list (Space) a tab belongs to in this window. */
+  listOf(tab) {
+    return this._list(tab.spaceId);
+  }
+
   /** Pin or unpin a tab. Pinning moves it to the end of the pinned group; unpinning to just after it. */
   setPinned(id, pinned) {
     const tab = this.getTab(id);
     if (!tab || tab.pinned === !!pinned) return;
-    this.tabs.splice(this.tabs.indexOf(tab), 1);
+    const list = this.listOf(tab);
+    list.splice(list.indexOf(tab), 1);
     tab.pinned = !!pinned;
-    this.tabs.splice(this.pinnedCount, 0, tab);
+    list.splice(list.filter((t) => t.pinned).length, 0, tab);
     tab.changed();
     this.emit('tabs-changed');
   }
@@ -292,51 +477,69 @@ class VexaWindow extends EventEmitter {
     return this.tabs.indexOf(this.activeTab);
   }
 
-  addTab({ url, restore, lazy = false, activate = true, index, webContents, openerId } = {}) {
-    const tab = new Tab(this, { url: url || (restore ? undefined : NEWTAB_URL), restore, lazy, webContents });
+  addTab({ url, restore, lazy = false, activate = true, index, webContents, openerId, spaceId } = {}) {
+    const sid = this.isPrivate ? PRIVATE_SPACE : spaceId && spaces.get(spaceId) ? spaceId : this.spaceId;
+    const ses = this.isPrivate ? this.session : spaces.sessionFor(sid);
+    const tab = new Tab(this, { url: url || (restore ? undefined : NEWTAB_URL), restore, lazy, webContents, session: ses });
+    tab.spaceId = sid;
     tab.openerId = openerId ?? null;
-    let at = index == null ? this.tabs.length : Math.max(0, Math.min(index, this.tabs.length));
+    const list = this._list(sid);
+    const pinned = list.filter((t) => t.pinned).length;
+    let at = index == null ? list.length : Math.max(0, Math.min(index, list.length));
     // Pinned tabs stay together on the left: ordinary tabs never go in front of them.
-    if (tab.pinned) at = Math.min(at, this.pinnedCount);
-    else at = Math.max(at, this.pinnedCount);
-    this.tabs.splice(at, 0, tab);
-    const { width, height } = this.contentSize();
-    const top = Math.round(this.layoutInfo.chromeHeight);
-    tab.view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) });
-    if (activate) this.activateTab(tab.id);
-    else this.sendState();
+    if (tab.pinned) at = Math.min(at, pinned);
+    else at = Math.max(at, pinned);
+    list.splice(at, 0, tab);
+    tab.view.setBounds(this._tabBounds());
+    if (this._ready && !restore) this.sound('tabOpen');
+    if (activate) {
+      this._quietSwitch = true;
+      this.activateTab(tab.id);
+      this._quietSwitch = false;
+    } else this.sendState();
     this.emit('tabs-changed');
     return tab;
   }
 
   /** Index for a tab opened from `opener` (after its other children, like Chrome). */
   _childInsertIndex(opener) {
-    let i = this.tabs.indexOf(opener);
-    if (i < 0) return this.tabs.length;
-    while (i + 1 < this.tabs.length && this.tabs[i + 1].openerId === opener.id) i++;
+    const list = this.listOf(opener);
+    let i = list.indexOf(opener);
+    if (i < 0) return list.length;
+    while (i + 1 < list.length && list[i + 1].openerId === opener.id) i++;
     return i + 1;
   }
 
   adoptTab(webContents, { afterTab, background, url }) {
-    const tab = this.addTab({ webContents, activate: !background, index: this._childInsertIndex(afterTab), openerId: afterTab.id });
+    const tab = this.addTab({ webContents, activate: !background, index: this._childInsertIndex(afterTab), openerId: afterTab.id, spaceId: afterTab.spaceId });
     tab.url = url;
     return tab;
   }
 
   openInNewTab(url, { background = false, opener = this.activeTab } = {}) {
     const index = opener ? this._childInsertIndex(opener) : undefined;
-    return this.addTab({ url, activate: !background, index, openerId: background ? opener?.id : null });
+    return this.addTab({ url, activate: !background, index, openerId: background ? opener?.id : null, spaceId: opener ? opener.spaceId : undefined });
   }
 
   getTab(id) {
-    return this.tabs.find((t) => t.id === id) || null;
+    if (id == null) return null;
+    for (const list of this.spaceTabs.values()) {
+      const t = list.find((x) => x.id === id);
+      if (t) return t;
+    }
+    return null;
   }
 
   activateTab(id) {
     const tab = this.getTab(id);
     if (!tab) return;
-    if (this.activeTab && this.activeTab !== tab && this.activeTab.attached) this._detachTab(this.activeTab);
+    // A tab in another Space: show that Space (with this tab in front).
+    if (tab.spaceId !== this.spaceId) return this.switchSpace(tab.spaceId, { tabId: id });
+    const prev = this.activeTab;
+    if (prev && prev !== tab && prev.attached) this._detachTab(prev);
     this.activeTab = tab;
+    this.spaceActive.set(this.spaceId, tab.id);
+    if (this._ready && prev && prev !== tab && !this._quietSwitch) this.sound('tabSwitch');
     tab.lastActive = Date.now();
     tab.ensureLoaded();
     this.hidePopup();
@@ -352,9 +555,10 @@ class VexaWindow extends EventEmitter {
   closeTab(id) {
     const tab = this.getTab(id);
     if (!tab) return;
-    const index = this.tabs.indexOf(tab);
+    const list = this.listOf(tab);
+    const index = list.indexOf(tab);
     if (!this.isPrivate && !(tab.isNewTab && !tab.wc.navigationHistory?.canGoBack())) {
-      this.closedTabs.push({ data: tab.serialize(), index });
+      this.closedTabs.push({ data: tab.serialize(), index, spaceId: tab.spaceId });
       if (this.closedTabs.length > 25) this.closedTabs.shift();
     }
     if (this.activeTab === tab) {
@@ -362,19 +566,26 @@ class VexaWindow extends EventEmitter {
       this.activeTab = null;
       // Prefer returning to the opener for a tab opened from it, else the right neighbour.
       const opener = tab.openerId != null ? this.getTab(tab.openerId) : null;
-      const next = opener || this.tabs[index + 1] || this.tabs[index - 1];
-      this.tabs.splice(index, 1);
+      const next = (opener && opener.spaceId === tab.spaceId ? opener : null) || list[index + 1] || list[index - 1];
+      list.splice(index, 1);
       tab.destroy();
-      if (next) this.activateTab(next.id);
+      if (next) {
+        this._quietSwitch = true;
+        this.activateTab(next.id);
+        this._quietSwitch = false;
+      }
     } else {
-      this.tabs.splice(index, 1);
+      list.splice(index, 1);
       tab.destroy();
     }
-    for (const t of this.tabs) if (t.openerId === tab.id) t.openerId = null;
-    if (!this.tabs.length) {
+    for (const t of this.allTabs()) if (t.openerId === tab.id) t.openerId = null;
+    if (!this.allTabs().length) {
       this.win.close();
       return;
     }
+    // The current Space is empty but others still have tabs: keep the window, start fresh here.
+    if (!this.tabs.length) this._openStartup(this.spaceId);
+    this.sound('tabClose');
     this.sendState();
     this.emit('tabs-changed');
   }
@@ -382,21 +593,49 @@ class VexaWindow extends EventEmitter {
   reopenClosedTab() {
     const last = this.closedTabs.pop();
     if (!last) return;
-    this.addTab({ restore: last.data, index: last.index, activate: true });
+    this.addTab({ restore: last.data, index: last.index, activate: true, spaceId: last.spaceId });
   }
 
   moveTab(id, index) {
     const tab = this.getTab(id);
     if (!tab) return;
-    const from = this.tabs.indexOf(tab);
-    this.tabs.splice(from, 1);
+    const list = this.listOf(tab);
+    const from = list.indexOf(tab);
+    list.splice(from, 1);
     // A pinned tab moves within the pinned group, an ordinary one only after it.
-    const pinned = this.pinnedCount;
+    const pinned = list.filter((t) => t.pinned).length;
     const lo = tab.pinned ? 0 : pinned;
-    const hi = tab.pinned ? pinned : this.tabs.length;
-    this.tabs.splice(Math.max(lo, Math.min(index, hi)), 0, tab);
+    const hi = tab.pinned ? pinned : list.length;
+    list.splice(Math.max(lo, Math.min(index, hi)), 0, tab);
     this.sendState();
     this.emit('tabs-changed');
+  }
+
+  /** Move a tab to another Space in this window (only between Spaces that share a session). */
+  moveTabToSpace(id, spaceId) {
+    const tab = this.getTab(id);
+    const to = spaces.get(spaceId);
+    if (!tab || !to || this.isPrivate || tab.spaceId === spaceId) return false;
+    const from = spaces.get(tab.spaceId);
+    if ((from && from.isolated) || to.isolated) throw new Error('Tabs can’t move into or out of an isolated Space (it has its own cookies and storage)');
+    const list = this.listOf(tab);
+    const wasActive = this.activeTab === tab;
+    if (wasActive) {
+      this._detachTab(tab);
+      this.activeTab = null;
+    }
+    const i = list.indexOf(tab);
+    list.splice(i, 1);
+    tab.pinned = false;
+    tab.spaceId = spaceId;
+    this._list(spaceId).push(tab);
+    if (wasActive) {
+      if (list.length) this.activateTab((list[i] || list[i - 1]).id);
+      else this._openStartup(this.spaceId);
+    }
+    this.sendState();
+    this.emit('tabs-changed');
+    return true;
   }
 
   // ---------------------------------------------------------------- moving tabs between windows
@@ -404,35 +643,39 @@ class VexaWindow extends EventEmitter {
   releaseTab(id) {
     const tab = this.getTab(id);
     if (!tab) return null;
-    const index = this.tabs.indexOf(tab);
+    const list = this.listOf(tab);
+    const index = list.indexOf(tab);
     if (tab.attached) this._detachTab(tab);
     if (this.activeTab === tab) {
       this.activeTab = null;
       const opener = tab.openerId != null ? this.getTab(tab.openerId) : null;
-      const next = opener || this.tabs[index + 1] || this.tabs[index - 1];
-      this.tabs.splice(index, 1);
+      const next = (opener && opener.spaceId === tab.spaceId ? opener : null) || list[index + 1] || list[index - 1];
+      list.splice(index, 1);
       if (next) this.activateTab(next.id);
     } else {
-      this.tabs.splice(index, 1);
+      list.splice(index, 1);
     }
-    for (const t of this.tabs) if (t.openerId === tab.id) t.openerId = null;
+    for (const t of this.allTabs()) if (t.openerId === tab.id) t.openerId = null;
     tab.openerId = null;
     this.setStatusUrl(tab, '');
+    // Other Spaces still have tabs but this one is now empty: give it a New Tab.
+    if (this.allTabs().length && !this.tabs.length) this._openStartup(this.spaceId);
     this.sendState();
     this.emit('tabs-changed');
     return tab;
   }
 
-  /** Adopt a live tab released by another window of the same kind (normal ↔ normal). */
-  receiveTab(tab, index = this.tabs.length) {
+  /** Adopt a live tab released by another window of the same kind (normal ↔ normal). It keeps its Space. */
+  receiveTab(tab, index) {
     tab.win = this;
     tab.attached = false;
     tab.pinned = false; // a tab moved to another window arrives unpinned
-    const at = Math.max(this.pinnedCount, Math.min(index, this.tabs.length));
-    this.tabs.splice(at, 0, tab);
-    const { width, height } = this.contentSize();
-    const top = Math.round(this.layoutInfo.chromeHeight);
-    tab.view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) });
+    if (this.isPrivate || !spaces.get(tab.spaceId)) tab.spaceId = this.spaceId;
+    const list = this.listOf(tab);
+    const pinned = list.filter((t) => t.pinned).length;
+    const at = Math.max(pinned, Math.min(index ?? list.length, list.length));
+    list.splice(at, 0, tab);
+    tab.view.setBounds(this._tabBounds());
     this.activateTab(tab.id);
     this.emit('tabs-changed');
     return tab;
@@ -469,12 +712,12 @@ class VexaWindow extends EventEmitter {
       const moved = this.releaseTab(id);
       target.receiveTab(moved, index);
       target.focus();
-      if (!this.tabs.length) this.win.close();
+      if (!this.allTabs().length) this.win.close();
       return 'moved';
     }
 
     // Dragged clear of the strip: tear it off into a window of its own.
-    if (out && this.tabs.length > 1) {
+    if (out && this.allTabs().length > 1) {
       const b = this.win.getBounds();
       const moved = this.releaseTab(id);
       app.createWindow({ transferTab: moved, bounds: { x: Math.round(pt.x - 140), y: Math.round(pt.y - 16), width: b.width, height: b.height } });
@@ -485,7 +728,7 @@ class VexaWindow extends EventEmitter {
 
   /** Menu/keyboard equivalent of dragging a tab out of the strip. */
   moveTabToNewWindow(id) {
-    if (this.isPrivate || this.tabs.length < 2 || !this.getTab(id)) return false;
+    if (this.isPrivate || this.allTabs().length < 2 || !this.getTab(id)) return false;
     const app = require('./app-controller');
     const b = this.win.getBounds();
     const moved = this.releaseTab(id);
@@ -498,14 +741,14 @@ class VexaWindow extends EventEmitter {
     const moved = this.releaseTab(id);
     target.receiveTab(moved);
     target.focus();
-    if (!this.tabs.length) this.win.close();
+    if (!this.allTabs().length) this.win.close();
     return true;
   }
 
   duplicateTab(id) {
     const tab = this.getTab(id);
     if (!tab) return;
-    this.addTab({ restore: tab.serialize(), index: this.tabs.indexOf(tab) + 1, activate: true });
+    this.addTab({ restore: tab.serialize(), index: this.listOf(tab).indexOf(tab) + 1, activate: true, spaceId: tab.spaceId });
   }
 
   closeOtherTabs(id) {
@@ -530,8 +773,15 @@ class VexaWindow extends EventEmitter {
   navigate(input, { disposition = 'current' } = {}) {
     let url = input;
     if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(input) || /\s/.test(input)) {
-      const r = resolveInput(input, settings.get('searchEngine'));
+      const r = resolveInput(input, settings.get('searchEngine'), { shortcuts: settings.get('searchShortcuts') });
       if (r.type === 'empty' || r.type === 'blocked') return;
+      // "@tabs mail" + Enter: go to the best match in that scope.
+      if (r.type === 'scope') {
+        const best = this._scopeItems(r.scope, r.query)[0];
+        if (best) this.pickSuggestion(best, disposition);
+        return;
+      }
+      if (r.type === 'search' && !this.isPrivate) require('./search-history').searchHistory.add(r.query, r.engine);
       url = r.url;
     }
     if (disposition === 'new-tab' || disposition === 'background') {
@@ -590,7 +840,8 @@ class VexaWindow extends EventEmitter {
 
   menuData() {
     const t = this.activeTab;
-    return { zoom: t ? t.zoom : 1, isPrivate: this.isPrivate, fullscreen: this.win.isFullScreen(), bookmarksBar: settings.get('showBookmarksBar'), canBookmark: !!t && !t.isNewTab && /^(https?|file):/.test(t.url), bookmarked: !!t && bookmarks.isBookmarked(t.url) };
+    const key = { 'ctrl+space': 'Ctrl+Space', 'ctrl+shift+space': 'Ctrl+Shift+Space', 'ctrl+shift+k': 'Ctrl+Shift+K', off: '' }[settings.get('commandCenterKey')];
+    return { zoom: t ? t.zoom : 1, isPrivate: this.isPrivate, fullscreen: this.win.isFullScreen(), bookmarksBar: settings.get('showBookmarksBar'), canBookmark: !!t && !t.isNewTab && /^(https?|file):/.test(t.url), bookmarked: !!t && bookmarks.isBookmarked(t.url), commandKey: key, focusActive: !!this.focusSession };
   }
 
   /** What the Vexa Shields panel shows for the active tab. */
@@ -637,31 +888,145 @@ class VexaWindow extends EventEmitter {
     return downloads.list().slice(0, 8);
   }
 
+  /** Open tabs (all normal windows, or just this private one) whose title or URL matches. */
+  _tabMatches(text, limit = 3, { exceptActive = true } = {}) {
+    const t = String(text || '').trim().toLowerCase();
+    const app = require('./app-controller');
+    const wins = this.isPrivate ? [this] : [...app.windows].filter((w) => !w.isPrivate && !w.closing);
+    const out = [];
+    for (const w of wins) {
+      for (const tab of w.allTabs()) {
+        if (exceptActive && tab === this.activeTab) continue;
+        const title = (tab.title || '').toLowerCase();
+        const url = (tab.url || '').toLowerCase();
+        if (t && !title.includes(t) && !url.replace(/^https?:\/\/(www\.)?/, '').includes(t)) continue;
+        const sp = w.isPrivate ? null : spaces.get(tab.spaceId);
+        out.push({ type: 'tab', title: tab.snapshot().title, url: tab.url, favicon: tab.favicon, tab: { windowId: w.id, tabId: tab.id }, subtitle: sp && spaces.list().length > 1 ? sp.name : '' });
+        if (out.length >= limit) return out;
+      }
+    }
+    return out;
+  }
+
+  /** Suggestions for one "@scope" filter. */
+  _scopeItems(scope, text, limit = 8) {
+    const q = String(text || '').trim();
+    if (scope === 'tabs') return this._tabMatches(q, limit, { exceptActive: false });
+    if (scope === 'bookmarks') return (q ? bookmarks.search(q, limit) : bookmarks.allBookmarks().slice(0, limit)).map((b) => ({ type: 'bookmark', title: b.title, url: b.url }));
+    if (scope === 'history') {
+      if (this.isPrivate) return [];
+      return (q ? history.suggest(q, limit) : history.query({ limit })).map((h) => ({ type: 'history', title: h.title || h.url, url: h.url, favicon: h.favicon }));
+    }
+    if (scope === 'collections') {
+      const { collections } = require('./collections');
+      return collections.search(q, limit).map((r) => (r.item ? { type: 'collection', title: r.item.title || r.item.url || 'Note', url: r.item.url || `vexa://collections/#c=${r.collection.id}&i=${r.item.id}`, subtitle: r.collection.name } : { type: 'collection', title: r.collection.name, url: `vexa://collections/#c=${r.collection.id}`, subtitle: `${r.collection.count} items` }));
+    }
+    if (scope === 'spaces') {
+      if (this.isPrivate) return [];
+      const l = q.toLowerCase();
+      return spaces.list().filter((s) => !l || s.name.toLowerCase().includes(l)).slice(0, limit).map((s) => ({ type: 'space', title: s.name, url: '', space: s.id, subtitle: s.id === this.spaceId ? 'Current Space' : 'Switch to this Space' }));
+    }
+    return [];
+  }
+
+  /** The user chose a suggestion (Enter on it, or a click in the list). */
+  pickSuggestion(item, disposition = 'current') {
+    if (!item) return;
+    if (item.tab) {
+      const app = require('./app-controller');
+      const w = [...app.windows].find((x) => x.id === item.tab.windowId);
+      if (w && w.getTab(item.tab.tabId) && (w === this || (!w.isPrivate && !this.isPrivate))) {
+        w.activateTab(item.tab.tabId);
+        if (w !== this) w.focus();
+        return;
+      }
+    }
+    if (item.space) return this.switchSpace(item.space);
+    if (item.url) {
+      if (item.type === 'search' && item.query && !this.isPrivate) require('./search-history').searchHistory.add(item.query, item.engine || settings.get('searchEngine'));
+      return this.navigate(item.url, { disposition });
+    }
+  }
+
   suggestions(text) {
     const engineId = settings.get('searchEngine');
     const q = String(text || '');
     const trimmed = q.trim();
     if (!trimmed) return { items: [], inline: null };
+    const shortcuts = settings.get('searchShortcuts');
+    const engineName = SEARCH_ENGINES[engineId].name;
+    const vexaSearch = require('./vexa-search');
+    const { searchHistory } = require('./search-history');
+
+    // "@key …": a keyword engine or a scope filter.
+    const kw = parseKeyword(trimmed, shortcuts);
+    if (kw && kw.kind === 'scope') {
+      const items = this._scopeItems(kw.key, kw.rest).map((it, i) => ({ ...it, pick: i === 0 }));
+      if (!items.length) items.push({ type: 'info', title: kw.rest ? `No ${kw.name.toLowerCase()} match “${kw.rest}”` : `Type to search ${kw.name.toLowerCase()}`, url: '' });
+      return { items, inline: null, scope: { key: kw.key, name: kw.name } };
+    }
+    if (kw && kw.kind === 'engine') {
+      const items = [{ type: 'search', title: kw.rest || '…', subtitle: `Search ${kw.shortcut.name}`, url: kw.rest ? fillTemplate(kw.shortcut.url, kw.rest) : '', primary: true, query: kw.rest, engine: kw.key }];
+      if (kw.rest && /^vexa:\/\/search\//i.test(kw.shortcut.url) && settings.get('vexaSuggestions')) {
+        for (const s of vexaSearch.suggest(kw.rest)) if (s !== kw.rest.toLowerCase()) items.push({ type: 'search', title: s, subtitle: kw.shortcut.name, url: fillTemplate(kw.shortcut.url, s), query: s, engine: kw.key });
+      }
+      return { items: items.slice(0, 8), inline: null, scope: { key: kw.key, name: kw.shortcut.name } };
+    }
+
     const resolved = resolveInput(trimmed, engineId);
     const items = [];
-    const engineName = SEARCH_ENGINES[engineId].name;
     if (resolved.type === 'url') items.push({ type: 'url', title: displayUrl(resolved.url) || resolved.url, url: resolved.url, primary: true });
-    else if (resolved.type === 'search') items.push({ type: 'search', title: trimmed, subtitle: `Search ${engineName}`, url: resolved.url, primary: true });
+    else if (resolved.type === 'search') items.push({ type: 'search', title: trimmed, subtitle: `Search ${engineName}`, url: resolved.url, primary: true, query: trimmed });
 
     const seen = new Set(items.map((i) => i.url));
     let inline = null;
     if (settings.get('suggestions')) {
       const lower = trimmed.toLowerCase();
+      if (settings.get('tabSuggestions') && trimmed.length > 1) {
+        for (const t of this._tabMatches(trimmed, 2)) {
+          if (seen.has(t.url)) continue;
+          seen.add(t.url);
+          items.push({ ...t, subtitle: t.subtitle ? `Switch to tab · ${t.subtitle}` : 'Switch to tab' });
+        }
+      }
       for (const b of bookmarks.search(trimmed, 3)) {
         if (seen.has(b.url)) continue;
         seen.add(b.url);
         items.push({ type: 'bookmark', title: b.title, url: b.url });
       }
-      const hist = history.suggest(trimmed, 8);
+      const hist = this.isPrivate ? [] : history.suggest(trimmed, 8);
       for (const h of hist) {
-        if (seen.has(h.url) || items.length >= 8) continue;
+        if (seen.has(h.url) || items.length >= 7) continue;
         seen.add(h.url);
         items.push({ type: 'history', title: h.title || h.url, url: h.url, favicon: h.favicon });
+      }
+      if (trimmed.length > 1) {
+        try {
+          const { collections } = require('./collections');
+          for (const r of collections.search(trimmed, 2)) {
+            if (!r.item || !r.item.url || seen.has(r.item.url)) continue;
+            seen.add(r.item.url);
+            items.push({ type: 'collection', title: r.item.title || r.item.url, url: r.item.url, subtitle: r.collection.name });
+          }
+        } catch {
+          /* collections unavailable */
+        }
+      }
+      // Search suggestions: your own recent searches, then completions from the offline Vexa Search index.
+      const searches = new Set([lower]);
+      if (!this.isPrivate) {
+        for (const s of searchHistory.suggest(trimmed, 2)) {
+          if (searches.has(s.q.toLowerCase())) continue;
+          searches.add(s.q.toLowerCase());
+          items.push({ type: 'recent', title: s.q, subtitle: 'Recent search', url: resolveInput(s.q, engineId).url, query: s.q });
+        }
+      }
+      if (settings.get('vexaSuggestions') && resolved.type === 'search') {
+        for (const s of vexaSearch.suggest(trimmed).slice(0, 3)) {
+          if (searches.has(s.toLowerCase())) continue;
+          searches.add(s.toLowerCase());
+          items.push({ type: 'search', title: s, subtitle: `Search ${engineName}`, url: resolveInput(s, engineId).url, query: s });
+        }
       }
       // Inline autocomplete: complete the typed text to a site the user visits.
       if (!/\s/.test(q) && q === q.trimStart()) {
@@ -679,7 +1044,7 @@ class VexaWindow extends EventEmitter {
         }
       }
     }
-    return { items: items.slice(0, 8), inline };
+    return { items: items.slice(0, 10), inline };
   }
 
   // ---------------------------------------------------------------- permission prompts
@@ -793,14 +1158,151 @@ class VexaWindow extends EventEmitter {
         return;
       case 'quit':
         return app.quit();
+      // ---- 0.90
+      case 'command-center':
+        if (this.popup?.kind === 'command') return this.hidePopup();
+        return this.showPopup('command', { query: payload?.query || '', isPrivate: this.isPrivate, key: settings.get('commandCenterKey') });
+      case 'reader':
+        return tab && require('./reader').reader.toggle(tab);
+      case 'focus-mode':
+        return require('./focus').focus.toggleMinimal(this);
+      case 'focus-start':
+        return require('./focus').focus.start(this, payload || {});
+      case 'focus-end':
+        return require('./focus').focus.stop(this);
+      case 'collect':
+        if (this.isPrivate) return;
+        return this.showPopup('collect', this.collectData(), payload?.anchor || null);
+      case 'screenshot':
+        if (!tab || this.isPrivate) return;
+        return require('./collections').collections.screenshotTab(tab, payload?.collectionId).then((r) => this.toast(`Screenshot saved to ${r.collection}`)).catch((e) => this.toast(e.message));
+      case 'collections':
+        return this.openInternal('vexa://collections/');
+      case 'customize':
+        return this.openInternal('vexa://newtab/#customize');
+      case 'toggle-sidebar':
+        return settings.set('sidebar', { show: !settings.get('sidebar').show });
+      case 'research':
+        return this.setResearch({ open: !this.research.open });
+      case 'new-space':
+        if (this.isPrivate) return;
+        return this.showPopup('space', this.spaceEditData(null), payload?.anchor || null);
+      case 'edit-space':
+        if (this.isPrivate) return;
+        return this.showPopup('space', this.spaceEditData(payload?.spaceId || this.spaceId), payload?.anchor || null);
+      case 'next-space':
+      case 'prev-space': {
+        const list = spaces.list();
+        if (this.isPrivate || list.length < 2) return;
+        const i = list.findIndex((s) => s.id === this.spaceId);
+        const d = action === 'next-space' ? 1 : -1;
+        return this.switchSpace(list[(i + d + list.length) % list.length].id);
+      }
+      case 'save-space-session': {
+        if (this.isPrivate) return;
+        const saved = spaces.saveSession(this.spaceId, payload?.name, this.tabs.map((t) => ({ url: t.url, title: t.title })));
+        return this.toast(`Saved “${saved.name}” (${saved.count} tab${saved.count === 1 ? '' : 's'})`);
+      }
+      case 'pin-to-space':
+        if (this.isPrivate || !tab || !/^https?:/i.test(tab.url)) return;
+        spaces.addPinned(this.spaceId, { url: tab.url, title: tab.title });
+        return this.toast(`Pinned to ${this.space.name}`);
       default: {
         const m = /^tab-(\d)$/.exec(action);
         if (m) {
           const t2 = this.tabs[Number(m[1]) - 1];
           if (t2) this.activateTab(t2.id);
         }
+        const sm = /^space-(\d)$/.exec(action);
+        if (sm && !this.isPrivate) {
+          const s = spaces.list()[Number(sm[1]) - 1];
+          if (s) this.switchSpace(s.id);
+        }
       }
     }
+  }
+
+  /** A short message, shown on the floating status layer (above the page) for a few seconds. */
+  toast(text) {
+    if (this.win.isDestroyed() || this.status.webContents.isDestroyed()) return;
+    this._toast = String(text).slice(0, 200);
+    this.lastToast = this._toast; // read by the end-to-end tests
+    clearTimeout(this._toastTimer);
+    clearTimeout(this.statusTimer);
+    this.status.webContents.send('status:toast', this._toast);
+    if (!this.statusAttached) {
+      this.win.contentView.addChildView(this.status);
+      this.statusAttached = true;
+      if (this.overlayAttached) this.win.contentView.addChildView(this.overlay);
+    }
+    this._positionStatus();
+    this._toastTimer = setTimeout(() => {
+      this._toast = null;
+      if (this.status.webContents.isDestroyed()) return;
+      this.status.webContents.send('status:toast', '');
+      if (this.statusAttached) {
+        this.win.contentView.removeChildView(this.status);
+        this.statusAttached = false;
+      }
+    }, 2800);
+  }
+
+  // ---------------------------------------------------------------- Collections / Spaces popups
+  collectData() {
+    const { collections } = require('./collections');
+    const t = this.activeTab;
+    const page = t && /^https?:/i.test(t.url) ? { title: t.title, url: t.url, favicon: t.favicon } : null;
+    return { page, collections: collections.summaries().slice(0, 40), recent: collections.lastUsedId() };
+  }
+
+  spaceEditData(id) {
+    const s = id ? spaces.get(id) : null;
+    const t = this.activeTab;
+    return { space: s ? structuredClone(s) : null, meta: spaces.meta(), count: s ? this._list(s.id).length : 0, current: { url: t && /^https?:/i.test(t.url) ? t.url : '', title: t ? t.title : '' }, total: spaces.list().length };
+  }
+
+  /** Research panel: a Collection docked beside the page, with notes and clipping. */
+  setResearch(patch = {}) {
+    if (this.isPrivate) return;
+    const { collections } = require('./collections');
+    const next = { ...this.research, ...patch };
+    if (next.open && !(next.collectionId && collections.get(next.collectionId))) next.collectionId = collections.lastUsedId() || collections.ensureDefault('Research').id;
+    this.research = next;
+    this.sendState();
+  }
+
+  researchData() {
+    if (!this.research.open) return null;
+    const { collections } = require('./collections');
+    const c = collections.get(this.research.collectionId);
+    if (!c) return null;
+    return { id: c.id, name: c.name, items: c.items.slice(-60).reverse().map((i) => ({ id: i.id, type: i.type, title: i.title, url: i.url, note: i.note, thumb: i.thumb ? collections.fileUrl(i.thumb) : '' })), all: collections.summaries().map((x) => ({ id: x.id, name: x.name })) };
+  }
+
+  async researchCommand(args) {
+    const { collections } = require('./collections');
+    const t = this.activeTab;
+    const cid = this.research.collectionId;
+    if (args.op === 'collection') return this.setResearch({ collectionId: String(args.id || '') });
+    if (args.op === 'close') return this.setResearch({ open: false });
+    if (args.op === 'note') {
+      const text = String(args.text || '').trim().slice(0, 20000);
+      if (text) collections.addItem(cid, { type: 'note', title: text.split('\n')[0].slice(0, 120), note: text, url: t && /^https?:/i.test(t.url) ? t.url : '' });
+      return;
+    }
+    if (args.op === 'save-page' && t && /^https?:/i.test(t.url)) return collections.addItem(cid, { type: 'link', title: t.title, url: t.url, favicon: t.favicon });
+    if (args.op === 'clip' && t && !t.wc.isDestroyed()) {
+      let sel = '';
+      try {
+        sel = await t.wc.executeJavaScriptInIsolatedWorld(1001, [{ code: 'String(window.getSelection ? window.getSelection() : "").slice(0, 20000)' }]);
+      } catch {
+        sel = '';
+      }
+      if (!String(sel || '').trim()) return this.toast('Select some text on the page first');
+      return collections.addItem(cid, { type: 'note', title: `“${String(sel).trim().slice(0, 100)}”`, note: String(sel).trim(), url: t.url, quote: true });
+    }
+    if (args.op === 'remove') return collections.removeItem(cid, String(args.itemId || ''));
+    if (args.op === 'open' && args.url) return this.navigate(String(args.url), { disposition: 'new-tab' });
   }
 
   /** Open an internal page, reusing an existing tab showing it, or the current new-tab page. */
@@ -865,6 +1367,10 @@ class VexaWindow extends EventEmitter {
         if (args.kind === 'menu') return this.showPopup('menu', this.menuData(), args.anchor);
         if (args.kind === 'downloads') return this.showPopup('downloads', this.downloadsData(), args.anchor);
         if (args.kind === 'shields') return this.showPopup('shields', this.shieldsData(), args.anchor);
+        if (args.kind === 'collect') return this.runAction('collect', { payload: { anchor: args.anchor } });
+        if (args.kind === 'space') return this.runAction(args.spaceId ? 'edit-space' : 'new-space', { payload: { anchor: args.anchor, spaceId: args.spaceId } });
+        if (args.kind === 'command') return this.runAction('command-center', { payload: { query: args.query || '' } });
+        if (args.kind === 'focus') return this.showPopup('focus', require('./focus').focus.popupData(this), args.anchor);
         return;
       case 'popup-hide':
         return this.hidePopup();
@@ -902,6 +1408,43 @@ class VexaWindow extends EventEmitter {
         return this.openInternal('vexa://settings/#permissions');
       case 'shields-proceed':
         return tab && tab.proceedUnsafe();
+      // ---- 0.90
+      case 'pick':
+        this.hidePopup();
+        return this.pickSuggestion(args.item, args.disposition || 'current');
+      case 'switch-space':
+        return this.switchSpace(String(args.spaceId || ''));
+      case 'move-to-space':
+        return tab && this.moveTabToSpace(tab.id, String(args.spaceId || ''));
+      case 'space-context':
+        return require('./context-menu').showSpaceMenu(this, String(args.spaceId || ''));
+      case 'sidebar-context':
+        return require('./context-menu').showSidebarMenu(this);
+      case 'open-pinned': {
+        const url = String(args.url || '');
+        if (!/^https?:\/\//i.test(url)) return;
+        const origin = url.match(/^https?:\/\/[^/]+/i)[0].toLowerCase();
+        const open = this.tabs.find((t) => t.url.toLowerCase().startsWith(origin));
+        if (open && !args.newTab) return this.activateTab(open.id);
+        return this.addTab({ url });
+      }
+      case 'pinned-context':
+        return require('./context-menu').showPinnedMenu(this, String(args.url || ''));
+      case 'focus': {
+        const { focus } = require('./focus');
+        if (args.op === 'stop') return focus.stop(this, { outcome: ['keep', 'collect', 'return'].includes(args.outcome) ? args.outcome : 'return' });
+        if (args.op === 'extend') return focus.extend(this, Number(args.minutes) || 10);
+        if (args.op === 'minimal') return focus.toggleMinimal(this);
+        if (args.op === 'allow') return focus.allowOnce(this, tab);
+        if (args.op === 'start') return focus.start(this, { name: args.name, minutes: Number(args.minutes), blockDistractions: args.blockDistractions, minimal: args.minimal, bringTab: args.bringTab });
+        return;
+      }
+      case 'research':
+        return this.researchCommand(args);
+      case 'atmo-sound-bytes':
+        return atmosphere.bytes(String(args.id || ''));
+      case 'reader':
+        return tab && require('./reader').reader.toggle(tab);
       default:
         throw new Error(`Unknown command ${name}`);
     }
@@ -924,7 +1467,76 @@ class VexaWindow extends EventEmitter {
       case 'pick-suggestion':
         this.hidePopup();
         this.chrome.send('suggestion-picked');
+        if (args.item) return this.pickSuggestion(args.item, args.disposition || 'current');
         return this.navigate(String(args.url), { disposition: args.disposition || 'current' });
+      // ---- Command Center
+      case 'cc-query':
+        return require('./command-center').commandCenter.query(this, String(args.text || '').slice(0, 300));
+      case 'cc-run': {
+        const keepOpen = !!args.keepOpen;
+        if (!keepOpen) this.hidePopup();
+        return require('./command-center').commandCenter.run(this, args.item, { disposition: args.disposition });
+      }
+      // ---- Save to Collection
+      case 'collect': {
+        const { collections } = require('./collections');
+        const t = this.activeTab;
+        if (args.op === 'new') {
+          const c = collections.create({ name: String(args.name || '').slice(0, 80) || 'New collection' });
+          args = { ...args, op: 'add', collectionId: c.id };
+        }
+        if (args.op === 'add' && t && /^https?:/i.test(t.url)) {
+          const c = collections.get(String(args.collectionId || ''));
+          if (!c) throw new Error('That collection no longer exists');
+          collections.addItem(c.id, { type: args.as === 'article' ? 'article' : 'link', title: t.title, url: t.url, favicon: t.favicon, note: String(args.note || '').slice(0, 5000) });
+          this.hidePopup();
+          return this.toast(`Saved to ${c.name}`);
+        }
+        if (args.op === 'screenshot') {
+          this.hidePopup();
+          return this.runAction('screenshot', { payload: { collectionId: args.collectionId } });
+        }
+        if (args.op === 'open') {
+          this.hidePopup();
+          return this.openInternal('vexa://collections/');
+        }
+        return;
+      }
+      // ---- Space editor
+      case 'space': {
+        if (this.isPrivate) return;
+        if (args.op === 'create') {
+          const s = spaces.create(args.data || {});
+          this.hidePopup();
+          this.switchSpace(s.id);
+          return s;
+        }
+        if (args.op === 'update') {
+          const s = spaces.update(String(args.id), args.data || {});
+          this.hidePopup();
+          return s;
+        }
+        if (args.op === 'delete') {
+          spaces.remove(String(args.id));
+          this.hidePopup();
+          return true;
+        }
+        if (args.op === 'manage') {
+          this.hidePopup();
+          return this.openInternal('vexa://settings/#spaces');
+        }
+        return;
+      }
+      // ---- Focus popup
+      case 'focus': {
+        const { focus } = require('./focus');
+        this.hidePopup();
+        if (args.op === 'start') return focus.start(this, { name: args.name, minutes: Number(args.minutes), blockDistractions: !!args.blockDistractions, minimal: !!args.minimal, bringTab: !!args.bringTab });
+        if (args.op === 'stop') return focus.stop(this, { outcome: ['keep', 'collect', 'return'].includes(args.outcome) ? args.outcome : 'return' });
+        if (args.op === 'extend') return focus.extend(this, Number(args.minutes) || 10);
+        if (args.op === 'minimal') return focus.toggleMinimal(this);
+        return;
+      }
       case 'download': {
         if (args.action === 'retry') {
           const rec = downloads.list().find((r) => r.id === args.id);
@@ -949,8 +1561,19 @@ class VexaWindow extends EventEmitter {
     setImmediate(() => {
       this._stateQueued = false;
       if (this.win.isDestroyed() || this.chrome.isDestroyed()) return;
-      this.chrome.send('state', this.state());
+      const st = this.state();
+      this.chrome.send('state', st);
+      // The popup layer and status bubble follow the window's Atmosphere look.
+      const lk = JSON.stringify(st.look);
+      if (lk !== this._lookSent) {
+        this._lookSent = lk;
+        this._sendLook(st.look);
+      }
     });
+  }
+
+  _sendLook(look = this.look()) {
+    for (const v of [this.overlay, this.status]) if (!v.webContents.isDestroyed()) v.webContents.send('look', look);
   }
 
   state() {
@@ -977,18 +1600,36 @@ class VexaWindow extends EventEmitter {
         active: active.length,
         progress: active.length && total > 0 ? received / total : active.length ? -1 : null,
         hasItems: dl.length > 0
-      }
+      },
+      // 0.90
+      spaceId: this.spaceId,
+      spaces: this.isPrivate ? [] : spaces.list().map((s) => ({ id: s.id, name: s.name, icon: s.icon, color: s.color, isolated: s.isolated, count: this._list(s.id).length })),
+      pinnedSites: this.space ? this.space.pinned : [],
+      look: this.look(),
+      sounds: atmosphere.soundConfig({ quiet: !!(this.focusSession && settings.get('focus').quietSounds) }),
+      sidebar: settings.get('sidebar'),
+      focus: require('./focus').focus.state(this),
+      research: this.researchData(),
+      commandKey: settings.get('commandCenterKey')
     };
   }
 
-  /** For session restore. */
+  /** For session restore: every Space's tabs, plus the current Space's in the 0.6 format. */
   serialize() {
     const bounds = this.win.isMaximized() || this.win.isFullScreen() ? this.win.getNormalBounds() : this.win.getBounds();
+    const perSpace = {};
+    for (const [id, list] of this.spaceTabs) {
+      if (!list.length) continue;
+      const active = this.getTab(this.spaceActive.get(id));
+      perSpace[id] = { activeIndex: Math.max(0, active ? list.indexOf(active) : 0), tabs: list.map((t) => t.serialize()) };
+    }
     return {
       bounds,
       maximized: this.win.isMaximized(),
+      spaceId: this.spaceId,
       activeIndex: Math.max(0, this.activeIndex),
-      tabs: this.tabs.map((t) => t.serialize())
+      tabs: this.tabs.map((t) => t.serialize()),
+      spaces: perSpace
     };
   }
 

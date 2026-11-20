@@ -10,6 +10,7 @@
 <body>
   <div class="sky" aria-hidden="true"></div>
   <div id="bg" class="bg" aria-hidden="true"><div class="bg-img"></div><div class="bg-scrim"></div></div>
+  <div id="fx" class="ntp-fx" aria-hidden="true"></div>
 
   <main class="ntp">
     <div class="hero">
@@ -18,81 +19,185 @@
       <div class="wordmark">vexa</div>
       <div id="greeting" class="greeting"></div>
     </div>
-    <form id="search-form" class="ntp-search" autocomplete="off">
-      <span id="search-icon" class="ntp-search-icon"></span>
-      <input id="q" type="text" spellcheck="false" aria-label="Search or enter address" />
-      <kbd class="ntp-kbd">Enter</kbd>
-    </form>
-    <section id="tiles" class="tiles" aria-label="Most visited"></section>
-    <div id="tiles-empty" class="tiles-empty" hidden>Sites you visit often will appear here.</div>
-    <div id="restore" class="restore" hidden><button class="linkish" id="restore-btn">Restore hidden sites</button></div>
+    <!-- Widgets, in the order chosen under Customize → Layout. -->
+    <div id="widgets" class="widgets">
+      <section class="w w-search" data-widget="search">
+        <form id="search-form" class="ntp-search" autocomplete="off">
+          <span id="search-icon" class="ntp-search-icon"></span>
+          <input id="q" type="text" spellcheck="false" aria-label="Search or enter address" />
+          <kbd class="ntp-kbd">Enter</kbd>
+        </form>
+        <div class="search-hints" id="search-hints"></div>
+      </section>
+      <section class="w w-favorites" data-widget="favorites" hidden>
+        <h3 class="w-title">Favorites</h3>
+        <div id="favorites" class="tiles fav-tiles" aria-label="Favorites"></div>
+        <form id="fav-form" class="fav-form" hidden autocomplete="off"><input id="fav-url" type="text" placeholder="https://…" spellcheck="false" /><input id="fav-title" type="text" placeholder="Name (optional)" /><button class="btn small primary">Add</button><button type="button" class="btn small" id="fav-cancel">Cancel</button></form>
+      </section>
+      <section class="w w-shortcuts" data-widget="shortcuts">
+        <h3 class="w-title" id="shortcuts-title" hidden>Most visited</h3>
+        <section id="tiles" class="tiles" aria-label="Most visited"></section>
+        <div id="tiles-empty" class="tiles-empty" hidden>Sites you visit often will appear here.</div>
+        <div id="restore" class="restore" hidden><button class="linkish" id="restore-btn">Restore hidden sites</button></div>
+      </section>
+      <section class="w w-recent glass-card" data-widget="recent" hidden><h3 class="w-title">Recently visited</h3><div id="recent" class="w-list"></div></section>
+      <section class="w w-collections glass-card" data-widget="collections" hidden><h3 class="w-title">Collections <a href="vexa://collections/" class="w-more">All</a></h3><div id="w-collections" class="w-cols"></div></section>
+      <section class="w w-spaces glass-card" data-widget="spaces" hidden><h3 class="w-title">Spaces</h3><div id="w-spaces" class="w-spaces-row"></div></section>
+      <section class="w w-weather glass-card" data-widget="weather" hidden><div id="weather" class="weather"></div></section>
+    </div>
   </main>
 
   <a id="shields-widget" class="widget shields-widget" href="vexa://settings/#shields" hidden></a>
-  <button id="customise-btn" class="customise-btn" hidden><span class="cb-icon"></span><span>Customise</span></button>
+  <button id="customize-btn" class="customize-btn" hidden><span class="cb-icon"></span><span>Customize</span></button>
 
   <footer class="ntp-foot">
     <a href="vexa://bookmarks/">Bookmarks</a><span>·</span>
     <a href="vexa://history/">History</a><span>·</span>
+    <a href="vexa://collections/">Collections</a><span>·</span>
     <a href="vexa://downloads/">Downloads</a><span>·</span>
     <a href="vexa://settings/">Settings</a>
   </footer>
 
   <div id="drawer-scrim" class="drawer-scrim" hidden></div>
-  <aside id="drawer" class="drawer" hidden aria-label="Customise New Tab">
+  <aside id="drawer" class="drawer" hidden aria-label="Customize Vexa">
     <header class="dr-head">
-      <h2>Customise New Tab</h2>
+      <h2>Customize</h2>
       <button id="drawer-close" class="dr-x" aria-label="Close"></button>
     </header>
+    <nav class="dr-tabs" role="tablist" id="dr-tabs">
+      <button role="tab" data-tab="wallpaper" class="on">Wallpaper</button>
+      <button role="tab" data-tab="atmosphere">Atmosphere</button>
+      <button role="tab" data-tab="sounds">Sounds</button>
+      <button role="tab" data-tab="layout">Layout</button>
+    </nav>
     <div class="dr-body">
-      <section class="dr-sec">
-        <h3>Wallpaper</h3>
-        <div id="wp-grid" class="wp-grid"></div>
-        <p class="dr-note">Your own images: JPG, PNG or WebP, up to 20 MB. You can also drop an image anywhere on this page. They stay on this computer.</p>
-      </section>
+      <!-- ============ Wallpaper -->
+      <div class="dr-pane" data-pane="wallpaper">
+        <section class="dr-sec">
+          <h3>Wallpaper</h3>
+          <div class="dr-row" id="wp-scope-row" hidden>
+            <span>Apply to</span>
+            <div class="seg" id="wp-scope"><button data-v="all">All Spaces</button><button data-v="space">This Space</button></div>
+          </div>
+          <p class="dr-note" id="wp-scope-note" hidden></p>
+          <div id="wp-grid" class="wp-grid"></div>
+          <p class="dr-note">Your own images: JPG, PNG or WebP, up to 20 MB. You can also drop an image anywhere on this page. They stay on this computer.</p>
+        </section>
+        <section class="dr-sec">
+          <h3>Change automatically</h3>
+          <div class="dr-row">
+            <span>Change wallpaper</span>
+            <select id="rotate">
+              <option value="off">Never</option>
+              <option value="newtab">Every new tab</option>
+              <option value="hourly">Every hour</option>
+              <option value="daily">Every day</option>
+            </select>
+          </div>
+          <div class="dr-row" id="rotate-source-row">
+            <span>Choose from</span>
+            <div class="seg" id="rotate-source"><button data-v="gallery">Gallery</button><button data-v="uploads">My images</button><button data-v="all">Both</button></div>
+          </div>
+        </section>
+        <section class="dr-sec" id="adjust-sec">
+          <h3>Adjust</h3>
+          <div class="dr-slider"><label for="s-blur">Blur</label><input type="range" id="s-blur" min="0" max="40" step="1" data-key="blur" /><output id="o-blur"></output></div>
+          <div class="dr-slider"><label for="s-brightness">Brightness</label><input type="range" id="s-brightness" min="30" max="130" step="1" data-key="brightness" /><output id="o-brightness"></output></div>
+          <div class="dr-slider"><label for="s-overlay">Overlay</label><input type="range" id="s-overlay" min="0" max="85" step="1" data-key="overlay" /><output id="o-overlay"></output></div>
+          <p class="dr-note" id="adjust-note" hidden>Choose a wallpaper to adjust it.</p>
+        </section>
+      </div>
 
-      <section class="dr-sec">
-        <h3>Change automatically</h3>
-        <div class="dr-row">
-          <span>Change wallpaper</span>
-          <select id="rotate">
-            <option value="off">Never</option>
-            <option value="newtab">Every new tab</option>
-            <option value="hourly">Every hour</option>
-            <option value="daily">Every day</option>
-          </select>
-        </div>
-        <div class="dr-row" id="rotate-source-row">
-          <span>Choose from</span>
-          <div class="seg" id="rotate-source"><button data-v="gallery">Gallery</button><button data-v="uploads">My images</button><button data-v="all">Both</button></div>
-        </div>
-      </section>
+      <!-- ============ Atmosphere -->
+      <div class="dr-pane" data-pane="atmosphere" hidden>
+        <section class="dr-sec">
+          <h3>Presets</h3>
+          <div id="presets" class="presets"></div>
+          <p class="dr-note">A preset sets the colors, motion, background effect, sounds and wallpaper together. Change anything afterwards to make it your own.</p>
+        </section>
+        <section class="dr-sec">
+          <h3>Colors</h3>
+          <div id="palettes" class="palettes"></div>
+          <div class="dr-row"><span>Accent color</span><span class="accent-pick"><input type="color" id="accent" aria-label="Accent color" /><button class="linkish" id="accent-reset">Use the theme's</button></span></div>
+          <div class="dr-row" id="space-look-row" hidden><span id="space-look-label">This Space</span><button class="linkish" id="space-look">Use these colors for this Space only</button></div>
+        </section>
+        <section class="dr-sec">
+          <h3>Motion &amp; effects</h3>
+          <div class="dr-row"><span>Background effect</span><select id="effect"><option value="none">None</option><option value="glow">Glow</option><option value="aurora">Aurora (animated)</option><option value="grid">Neon grid (animated)</option><option value="stars">Star field (animated)</option></select></div>
+          <div class="dr-row"><span>Tab animation</span><select id="tab-anim"><option value="smooth">Smooth</option><option value="spring">Springy</option><option value="fade">Fade</option><option value="none">None</option></select></div>
+          <label class="dr-row"><span>Interface transitions</span><span class="switch"><input type="checkbox" id="transitions" /><span></span></span></label>
+          <label class="dr-row"><span>Wallpaper behind the tab strip</span><span class="switch"><input type="checkbox" id="chrome-wp" /><span></span></span></label>
+          <p class="dr-note">Animated effects run at a low frame rate, slow down when Vexa is in the background, and stay still if Windows is set to reduce motion.</p>
+        </section>
+        <section class="dr-sec">
+          <h3>Sidebar</h3>
+          <label class="dr-row"><span>Show sidebar</span><span class="switch"><input type="checkbox" id="sb-show" /><span></span></span></label>
+          <div class="dr-row"><span>Position</span><div class="seg" id="sb-side"><button data-v="left">Left</button><button data-v="right">Right</button></div></div>
+          <div class="dr-row"><span>Size</span><div class="seg" id="sb-size"><button data-v="compact">Icons</button><button data-v="wide">Icons &amp; names</button></div></div>
+          <div class="sb-items" id="sb-items"></div>
+        </section>
+        <div class="dr-row"><span></span><button class="linkish" id="atmo-reset">Reset Atmosphere</button></div>
+      </div>
 
-      <section class="dr-sec" id="adjust-sec">
-        <h3>Adjust</h3>
-        <div class="dr-slider"><label for="s-blur">Blur</label><input type="range" id="s-blur" min="0" max="40" step="1" data-key="blur" /><output id="o-blur"></output></div>
-        <div class="dr-slider"><label for="s-brightness">Brightness</label><input type="range" id="s-brightness" min="30" max="130" step="1" data-key="brightness" /><output id="o-brightness"></output></div>
-        <div class="dr-slider"><label for="s-overlay">Overlay</label><input type="range" id="s-overlay" min="0" max="85" step="1" data-key="overlay" /><output id="o-overlay"></output></div>
-        <p class="dr-note" id="adjust-note" hidden>Choose a wallpaper to adjust it.</p>
-      </section>
+      <!-- ============ Sounds -->
+      <div class="dr-pane" data-pane="sounds" hidden>
+        <section class="dr-sec">
+          <h3>Interface sounds</h3>
+          <label class="dr-row"><span><b>Sounds</b></span><span class="switch"><input type="checkbox" id="snd-on" /><span></span></span></label>
+          <div class="dr-slider"><label for="snd-vol">Volume</label><input type="range" id="snd-vol" min="0" max="100" step="1" /><output id="o-vol"></output></div>
+          <div class="dr-row"><span>Sound profile</span><span class="prof-pick"><select id="snd-profile"></select><button class="ibtn" id="snd-prof-preview" title="Preview"></button></span></div>
+          <p class="dr-note">Sounds play inside Vexa's own interface — never in web pages — so they don't mix with, duck or pause a site's audio.</p>
+        </section>
+        <section class="dr-sec">
+          <h3>Sound for…</h3>
+          <div id="snd-cats" class="snd-cats"></div>
+        </section>
+        <section class="dr-sec">
+          <h3>Your sounds</h3>
+          <div id="snd-list" class="snd-list"></div>
+          <button class="btn small" id="snd-import">Import a sound…</button>
+          <p class="dr-note">MP3, WAV, OGG, FLAC, M4A/AAC or WebM, up to 2 MB and 8 seconds. Copied into your profile; nothing is uploaded.</p>
+        </section>
+      </div>
 
-      <section class="dr-sec">
-        <h3>Show on New Tab</h3>
-        <label class="dr-row"><span>Shortcuts</span><span class="switch"><input type="checkbox" data-show="shortcuts" /><span></span></span></label>
-        <label class="dr-row"><span>Greeting</span><span class="switch"><input type="checkbox" data-show="greeting" /><span></span></span></label>
-        <label class="dr-row"><span>Clock</span><span class="switch"><input type="checkbox" data-show="clock" /><span></span></span></label>
-        <label class="dr-row"><span>Vexa Shields stats</span><span class="switch"><input type="checkbox" data-show="shieldsStats" /><span></span></span></label>
-      </section>
+      <!-- ============ Layout -->
+      <div class="dr-pane" data-pane="layout" hidden>
+        <section class="dr-sec">
+          <h3>Layout</h3>
+          <div class="dr-row"><span>Arrangement</span><div class="seg" id="ntp-layout"><button data-v="centered">Centered</button><button data-v="dashboard">Dashboard</button></div></div>
+        </section>
+        <section class="dr-sec">
+          <h3>Widgets</h3>
+          <div id="widget-list" class="widget-list"></div>
+          <p class="dr-note">Drag to reorder, or use the arrows.</p>
+        </section>
+        <section class="dr-sec" id="weather-sec">
+          <h3>Weather</h3>
+          <form class="dr-row" id="city-form" autocomplete="off"><input id="city" type="text" placeholder="Find your city…" /><button class="btn small">Find</button></form>
+          <div id="city-results" class="city-results"></div>
+          <div class="dr-row"><span id="city-now">No city chosen</span><div class="seg" id="w-unit"><button data-v="c">°C</button><button data-v="f">°F</button></div></div>
+          <p class="dr-note">Off unless you turn the widget on. Weather comes from open-meteo.com: Vexa sends the city name you search for and then its rounded coordinates — nothing else.</p>
+        </section>
+        <section class="dr-sec">
+          <h3>Also show</h3>
+          <label class="dr-row"><span>Greeting</span><span class="switch"><input type="checkbox" data-show="greeting" /><span></span></span></label>
+          <label class="dr-row"><span>Clock</span><span class="switch"><input type="checkbox" data-show="clock" /><span></span></span></label>
+          <label class="dr-row"><span>Vexa Shields stats</span><span class="switch"><input type="checkbox" data-show="shieldsStats" /><span></span></span></label>
+        </section>
+      </div>
     </div>
     <footer class="dr-foot">
-      <button class="btn" id="reset-look">Reset to default appearance</button>
+      <button class="btn" id="reset-look">Reset New Tab to the default look</button>
     </footer>
   </aside>
 
   <div id="drop-hint" class="drop-hint" hidden><div><span class="dh-icon"></span>Drop to use as your wallpaper</div></div>
 
   <script src="vexa://shared/icons.js"></script>
+  <script src="vexa://shared/palettes.js"></script>
+  <script src="vexa://shared/sound-engine.js"></script>
   <script src="vexa://shared/page.js"></script>
   <script src="newtab.js"></script>
+  <script src="customize.js"></script>
 </body>
 </html>

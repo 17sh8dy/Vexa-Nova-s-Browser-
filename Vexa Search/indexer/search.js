@@ -22,7 +22,7 @@ const MAX_CANDIDATES = 1000;
 
 function parseQuery(raw) {
   const q = String(raw || '').slice(0, MAX_QUERY);
-  const out = { raw: q.trim(), terms: [], words: [], phrases: [], exclude: [], sites: [] };
+  const out = { raw: q.trim(), terms: [], words: [], phrases: [], exclude: [], sites: [], categories: [] };
   const re = /(-?)"([^"]*)"?|(\S+)/g;
   let m;
   while ((m = re.exec(q))) {
@@ -37,6 +37,9 @@ function parseQuery(raw) {
     const tok = m[3];
     const site = /^site:(.+)$/i.exec(tok);
     if (site) { out.sites.push(site[1].toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')); continue; }
+    // in:nova — only pages from one seed category (e.g. Nova's own sites).
+    const cat = /^in:([a-z]{2,20})$/i.exec(tok);
+    if (cat) { out.categories.push(cat[1].toLowerCase()); continue; }
     if (tok.startsWith('-') && tok.length > 1) { words(tok.slice(1)).map(termOf).filter(Boolean).forEach((t) => out.exclude.push(t)); continue; }
     for (const w of words(tok)) { out.words.push(w); const t = termOf(w); if (t) out.terms.push(t); }
   }
@@ -162,6 +165,7 @@ class Searcher {
       if (!p) continue;
       const hostname = p.host.replace(/:\d+$/, '');
       if (query.sites.length && !query.sites.some((s) => hostname === s || hostname.endsWith('.' + s))) continue;
+      if (query.categories.length && !query.categories.includes(String(p.category || '').toLowerCase())) continue;
       const d = this.docStats(id);
       // PageRank is a nudge, not a trump card: relevance decides first.
       let s = a.s * (0.9 + 0.1 * Math.min(3, Math.log2(1 + (d.pagerank || 1))));

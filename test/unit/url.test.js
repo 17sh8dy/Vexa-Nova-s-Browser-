@@ -28,7 +28,7 @@ test('local addresses get http', () => {
 });
 
 test('queries become searches', () => {
-  assert.deepStrictEqual(r('how do rockets work'), { url: 'https://duckduckgo.com/?q=how%20do%20rockets%20work', type: 'search' });
+  assert.deepStrictEqual(r('how do rockets work'), { url: 'https://duckduckgo.com/?q=how%20do%20rockets%20work', type: 'search', query: 'how do rockets work', engine: 'duckduckgo' });
   assert.strictEqual(r('electron').type, 'search');
   assert.strictEqual(r('node.js tutorial').type, 'search');
   assert.strictEqual(r('what is 2+2?').type, 'search');

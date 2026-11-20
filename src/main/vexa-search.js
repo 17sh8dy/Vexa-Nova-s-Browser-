@@ -64,6 +64,21 @@ function handleRequest(requestUrl) {
   return new Response(r.status === 302 || r.status === 204 ? null : r.body, { status: r.status, headers });
 }
 
+/** Word completions from the offline index (for the address bar). Never touches the network. */
+function suggest(text) {
+  const q = String(text || '').slice(0, 100);
+  if (q.trim().length < 2) return [];
+  load();
+  if (!handler) return [];
+  try {
+    const r = handler(new URL('/api/suggest?q=' + encodeURIComponent(q), 'http://vexa-search'), { origin: 'vexa://search' });
+    const j = JSON.parse(String(r.body));
+    return Array.isArray(j.suggestions) ? j.suggestions.filter((s) => typeof s === 'string').slice(0, 8) : [];
+  } catch {
+    return [];
+  }
+}
+
 app.on('will-quit', () => { handler = null; });
 
-module.exports = { handleRequest, indexPath };
+module.exports = { handleRequest, indexPath, suggest };

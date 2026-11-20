@@ -27,7 +27,9 @@ const FILE = 'vexa-sync.json';
 const SYNC_SETTING_KEYS = [
   'theme', 'searchEngine', 'homeMode', 'homeUrl', 'showHomeButton', 'showBookmarksBar', 'startup',
   'blockThirdPartyCookies', 'doNotTrack', 'suggestions', 'permissionDefaults', 'clearOnExit', 'offerToSavePasswords',
-  'shields', 'shieldsSites', 'newTab'
+  'shields', 'shieldsSites', 'newTab',
+  // 0.90 (imported sound files and Collections' files stay on each device; see README)
+  'atmosphere', 'sidebar', 'focus', 'searchShortcuts', 'vexaSuggestions', 'tabSuggestions', 'searchHistory', 'commandCenterKey', 'googleCompat', 'googleSignInButtons'
 ];
 const INTERVAL = 5 * 60 * 1000;
 const DEBOUNCE = 20 * 1000;
@@ -73,6 +75,7 @@ class Sync {
     });
     passwords.on('changed', ({ fromSync }) => !fromSync && this._schedule());
     autofill.on('changed', ({ fromSync }) => !fromSync && this._schedule());
+    this._collections().on('changed', (info) => !this.applying && !(info && info.fromSync) && this._schedule());
 
     if (this.store.data.enabled) {
       setTimeout(() => this.syncNow().catch(() => {}), 4000);
@@ -137,13 +140,19 @@ class Sync {
     return decrypt(JSON.parse(raw), pass);
   }
 
+  _collections() {
+    return require('./collections').collections;
+  }
+
   _snapshot() {
     const s = settings.get();
     const picked = {};
     for (const k of SYNC_SETTING_KEYS) picked[k] = s[k];
+    const col = this._collections().syncData();
     return {
-      updated: { settings: this.d.modified.settings, bookmarks: this.d.modified.bookmarks, autofill: autofill.modified },
+      updated: { settings: this.d.modified.settings, bookmarks: this.d.modified.bookmarks, autofill: autofill.modified, collections: col.modified },
       settings: picked,
+      collections: col.collections,
       bookmarks: { nextId: bookmarks.store.data.nextId, nodes: bookmarks.store.data.nodes },
       autofill: autofill.get(),
       passwords: passwords.syncSnapshot()
@@ -186,6 +195,9 @@ class Sync {
             if (localOnly.length) this.d.modified.bookmarks = Date.now();
           }
           if ((remote.updated?.autofill || 0) > autofill.modified) autofill.set(remote.autofill || {}, { fromSync: true, modified: remote.updated.autofill });
+          // Collections: replaced as a whole by the device that changed them last (files stay per device).
+          const col = this._collections();
+          if (Array.isArray(remote.collections) && (remote.updated?.collections || 0) > (col.syncData().modified || 0)) col.applySync({ collections: remote.collections, modified: remote.updated.collections });
           passwords.syncMerge(remote.passwords);
         } else {
           // Nothing to merge with: this device becomes the source.

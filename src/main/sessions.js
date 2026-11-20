@@ -42,15 +42,20 @@ function cleanUserAgent() {
     .replace(/\svexa\/\S+/i, '');
 }
 
-// Google's sign-in refuses browsers it can't identify as Chrome. Besides dropping the
-// Electron token from the user agent, make the Client Hints headers say "Google Chrome".
-const GOOGLE_HOST = /(^|.)(google.[a-z.]+|youtube.com|gstatic.com|googleusercontent.com)$/i;
-function googleBrandHeaders() {
-  const major = String(process.versions.chrome || '130').split('.')[0];
-  return {
-    'sec-ch-ua': `"Chromium";v="${major}", "Google Chrome";v="${major}", "Not.A/Brand";v="99"`,
-    'sec-ch-ua-full-version-list': `"Chromium";v="${process.versions.chrome}", "Google Chrome";v="${process.versions.chrome}", "Not.A/Brand";v="99.0.0.0"`
-  };
+// Google sign-in compatibility (docs/COMPATIBILITY.md). Optional Chrome brand in Client
+// Hints on Google's own hosts — see isGoogleHost / googleBrandHeaders in url.js.
+const { isGoogleHost, isGoogleSignInUrl, googleBrandHeaders: brandHeaders } = require('./url');
+const googleBrandHeaders = () => brandHeaders(process.versions.chrome);
+const GOOGLE_HOST = { test: (h) => isGoogleHost(h) };
+
+// "Sign in with Google" buttons (Google Identity Services) on other sites run in an
+// accounts.google.com iframe that needs the user's Google cookies to show who is signed in.
+// Cross-site cookie blocking would strip them and the button silently fails. Like Brave's
+// "Allow Google login buttons on third-party sites", Vexa exempts only that endpoint, and
+// only while Settings → Compatibility → "Google sign-in buttons on other sites" is on.
+// Nothing else Google loads on other sites (ads, analytics, fonts…) is exempted.
+function isGoogleSignInButton(details) {
+  return !!settings.get('googleSignInButtons') && isGoogleSignInUrl(details.url);
 }
 
 function registerProtocol(ses, isPrivate = false) {
@@ -66,6 +71,8 @@ function registerProtocol(ses, isPrivate = false) {
     if (host === 'search') return vexaSearch.handleRequest(request.url);
     // The user's own New Tab wallpapers: image bytes from the profile, same origin as the page.
     if (host === 'newtab' && url.pathname.startsWith('/uploads/')) return require('./wallpapers').wallpapers.serve(url.pathname.slice('/uploads/'.length));
+    // Images and videos saved in Collections (same origin as vexa://collections).
+    if (host === 'collections' && url.pathname.startsWith('/files/')) return require('./collections').collections.serve(url.pathname.slice('/files/'.length));
     if (!INTERNAL_PAGES.includes(host) && host !== 'shared') {
       return new Response(`<!doctype html><meta charset=utf-8><title>Not found</title><body style="font-family:system-ui;padding:40px">vexa://${host} doesn't exist.`, {
         status: 404,
@@ -141,12 +148,13 @@ function configureWebRequest(ses) {
       headers['Sec-GPC'] = '1';
     }
     const top = details.resourceType === 'mainFrame' ? '' : topLevelUrl(details);
-    if (isThirdParty(details, top) && shields.blocksCookies(top, ses)) {
+    if (isThirdParty(details, top) && shields.blocksCookies(top, ses) && !isGoogleSignInButton(details)) {
       if (headers.Cookie || headers.cookie) shields.count(details.webContentsId, 'cookies');
       delete headers.Cookie;
       delete headers.cookie;
     }
-    if (GOOGLE_HOST.test(hostOf(details.url))) {
+    // Opt-out compatibility mode (Settings → Compatibility): Chrome brand in Client Hints on Google's hosts.
+    if (settings.get('googleCompat') && GOOGLE_HOST.test(hostOf(details.url))) {
       for (const k of Object.keys(headers)) if (/^sec-ch-ua(-full-version-list)?$/i.test(k)) delete headers[k];
       Object.assign(headers, googleBrandHeaders());
     }
@@ -155,7 +163,7 @@ function configureWebRequest(ses) {
 
   ses.webRequest.onHeadersReceived(filter, (details, callback) => {
     const top = details.resourceType === 'mainFrame' ? '' : topLevelUrl(details);
-    if (!details.responseHeaders || !isThirdParty(details, top) || !shields.blocksCookies(top, ses)) {
+    if (!details.responseHeaders || !isThirdParty(details, top) || !shields.blocksCookies(top, ses) || isGoogleSignInButton(details)) {
       callback({});
       return;
     }
@@ -256,22 +264,37 @@ function newPrivateSession() {
  */
 async function clearBrowsingData(what, { since = 0 } = {}) {
   const { history } = require('./history');
-  const ses = session.defaultSession;
-  const jobs = [];
-  if (what.history) history.clear(since);
-  if (what.downloads) downloads.clearFinished(since);
-  if (what.cookies && !(since > 0)) {
-    jobs.push(
-      ses.clearStorageData({
-        storages: ['cookies', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage']
-      })
-    );
-    jobs.push(ses.clearAuthCache());
+  // The default session plus every isolated Space's own partition.
+  let sessions = [session.defaultSession];
+  try {
+    sessions = sessions.concat(require('./spaces').spaces.isolatedSessions());
+  } catch {
+    /* spaces not ready */
   }
-  if (what.cache && !(since > 0)) {
-    jobs.push(ses.clearCache());
-    jobs.push(ses.clearCodeCaches({}));
-    jobs.push(ses.clearHostResolverCache());
+  const jobs = [];
+  if (what.history) {
+    history.clear(since);
+    try {
+      require('./search-history').searchHistory.clear(since);
+    } catch {
+      /* not ready */
+    }
+  }
+  if (what.downloads) downloads.clearFinished(since);
+  for (const ses of sessions) {
+    if (what.cookies && !(since > 0)) {
+      jobs.push(
+        ses.clearStorageData({
+          storages: ['cookies', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage']
+        })
+      );
+      jobs.push(ses.clearAuthCache());
+    }
+    if (what.cache && !(since > 0)) {
+      jobs.push(ses.clearCache());
+      jobs.push(ses.clearCodeCaches({}));
+      jobs.push(ses.clearHostResolverCache());
+    }
   }
   if (what.permissions) settings.set('sitePermissions', {});
   if (what.passwords && !(since > 0)) require('./passwords').passwords.clearAll();

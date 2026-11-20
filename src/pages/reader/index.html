@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-own-theme>
+<head>
+  <meta charset="utf-8" />
+  <title>Reader</title>
+  <link rel="stylesheet" href="vexa://shared/theme.css" />
+  <link rel="stylesheet" href="reader.css" />
+</head>
+<body>
+  <header class="rd-bar" id="bar">
+    <button class="rd-btn" id="leave" title="Back to the page (F9)"><span id="leave-ico"></span><span>Original page</span></button>
+    <span class="rd-site" id="site"></span>
+    <span class="grow"></span>
+    <div class="rd-group" role="group" aria-label="Text size"><button class="rd-btn" id="smaller" title="Smaller text">A−</button><button class="rd-btn" id="bigger" title="Larger text">A+</button></div>
+    <div class="rd-group" role="group" aria-label="Font"><button class="rd-btn" data-font="serif">Serif</button><button class="rd-btn" data-font="sans">Sans</button><button class="rd-btn" data-font="mono">Mono</button></div>
+    <div class="rd-group" role="group" aria-label="Width"><button class="rd-btn" id="narrower" title="Narrower column">⇥⇤</button><button class="rd-btn" id="wider" title="Wider column">⇤⇥</button></div>
+    <div class="rd-group" role="group" aria-label="Theme"><button class="rd-sw" data-theme="auto" title="Match Vexa"></button><button class="rd-sw" data-theme="light" title="Light"></button><button class="rd-sw" data-theme="sepia" title="Sepia"></button><button class="rd-sw" data-theme="dark" title="Dark"></button></div>
+    <button class="rd-btn" id="save" title="Save to a collection"><span id="save-ico"></span><span>Save</span></button>
+    <label class="rd-always" title="Open articles on this site in Reader view automatically"><input type="checkbox" id="always" /> Always on this site</label>
+  </header>
+  <main class="rd-page" id="page">
+    <article class="rd-article" id="article">
+      <p class="rd-loading">Loading…</p>
+    </article>
+  </main>
+  <script src="vexa://shared/icons.js"></script>
+  <script src="reader.js"></script>
+</body>
+</html>

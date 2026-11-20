@@ -106,7 +106,107 @@ function showPageMenu(tab, params) {
     }
   }
 
+  // Collections: save the page, a link, an image, or the selected text.
+  if (!win.isPrivate) {
+    const save = collectItems(win, tab, params);
+    if (save.length) {
+      sep();
+      t.push({ label: 'Save to collection', submenu: save });
+    }
+  }
+  if (/^https?:/.test(tab.url) && !params.isEditable) t.push({ label: 'Reader view', accelerator: 'F9', click: () => require('./reader').reader.toggle(tab) });
+  sep();
   t.push({ label: 'Inspect', click: () => wc.inspectElement(params.x, params.y) });
+  Menu.buildFromTemplate(t).popup({ window: win.win });
+}
+
+/** "Save to collection ▸ <collection>" for whatever was right-clicked. */
+function collectItems(win, tab, params) {
+  const { collections } = require('./collections');
+  const list = collections.summaries().slice(0, 12);
+  let what = null;
+  if (params.mediaType === 'image' && /^https?:/i.test(params.srcURL || '')) what = { kind: 'image', label: 'image' };
+  else if (params.mediaType === 'video' && /^https?:/i.test(params.srcURL || '')) what = { kind: 'video', label: 'video' };
+  else if (params.linkURL && /^https?:/i.test(params.linkURL)) what = { kind: 'link', label: 'link' };
+  else if (params.selectionText && params.selectionText.trim()) what = { kind: 'note', label: 'selection as a note' };
+  else if (/^https?:/i.test(tab.url)) what = { kind: 'page', label: 'page' };
+  if (!what) return [];
+  const add = async (cid) => {
+    try {
+      if (what.kind === 'image') {
+        // Saved as a copy (the image bytes come from Chromium's cache via a fresh fetch in the page's session).
+        const res = await tab.wc.session.fetch(params.srcURL);
+        const buf = Buffer.from(await res.arrayBuffer());
+        collections.addFileBytes(cid, params.srcURL.split('/').pop().split('?')[0] || 'image', buf, { title: params.titleText || params.altText || tab.title, url: params.srcURL });
+      } else if (what.kind === 'video') collections.addItem(cid, { type: 'video', title: params.titleText || `Video on ${tab.title}`, url: params.srcURL });
+      else if (what.kind === 'link') collections.addItem(cid, { type: 'link', title: (params.linkText || params.linkURL).trim().slice(0, 300), url: params.linkURL });
+      else if (what.kind === 'note') collections.addItem(cid, { type: 'note', title: `“${params.selectionText.trim().slice(0, 100)}”`, note: params.selectionText.trim(), url: tab.url, quote: true });
+      else collections.addItem(cid, { type: 'link', title: tab.title, url: tab.url, favicon: tab.favicon });
+      win.toast(`Saved ${what.label} to ${collections.get(cid)?.name || 'collection'}`);
+    } catch (err) {
+      win.toast(`Couldn’t save: ${err.message}`);
+    }
+  };
+  const items = list.map((c) => ({ label: truncate(c.name, 40), click: () => add(c.id) }));
+  if (items.length) items.push({ type: 'separator' });
+  items.push({ label: 'New collection…', click: () => add(collections.create({ name: what.kind === 'page' ? truncate(tab.title || 'New collection', 60) : 'New collection' }).id) });
+  if (what.kind === 'page') items.push({ label: 'Screenshot this page', click: () => win.runAction('screenshot') });
+  return items;
+}
+
+/** Right-click on a Space in the sidebar. */
+function showSpaceMenu(win, spaceId) {
+  const { spaces } = require('./spaces');
+  const s = spaces.get(spaceId);
+  if (!s || win.isPrivate) return;
+  const list = spaces.list();
+  const i = list.findIndex((x) => x.id === s.id);
+  const t = [
+    { label: s.id === win.spaceId ? 'Current Space' : `Switch to ${truncate(s.name, 30)}`, enabled: s.id !== win.spaceId, click: () => win.switchSpace(s.id) },
+    { type: 'separator' },
+    { label: 'Edit Space…', click: () => win.runAction('edit-space', { payload: { spaceId: s.id } }) },
+    { label: 'Save tabs as a session', enabled: s.id === win.spaceId && win.tabs.some((x) => /^https?:/.test(x.url)), click: () => win.runAction('save-space-session') },
+    { label: 'Move up', enabled: i > 0, click: () => spaces.move(s.id, i - 1) },
+    { label: 'Move down', enabled: i < list.length - 1, click: () => spaces.move(s.id, i + 1) },
+    { type: 'separator' },
+    { label: 'Manage Spaces…', click: () => win.openInternal('vexa://settings/#spaces') },
+    { label: 'Delete Space', enabled: list.length > 1, click: () => spaces.remove(s.id) }
+  ];
+  Menu.buildFromTemplate(t).popup({ window: win.win });
+}
+
+/** Right-click on empty sidebar space: sidebar customization. */
+function showSidebarMenu(win) {
+  const sb = settings.get('sidebar');
+  const set = (patch) => settings.set('sidebar', patch);
+  const item = (key, label) => ({ label, type: 'checkbox', checked: sb.items[key] !== false, click: () => set({ items: { [key]: sb.items[key] === false } }) });
+  const t = [
+    { label: 'Position', submenu: [{ label: 'Left', type: 'radio', checked: sb.side === 'left', click: () => set({ side: 'left' }) }, { label: 'Right', type: 'radio', checked: sb.side === 'right', click: () => set({ side: 'right' }) }] },
+    { label: 'Size', submenu: [{ label: 'Compact (icons)', type: 'radio', checked: sb.size === 'compact', click: () => set({ size: 'compact' }) }, { label: 'Wide (icons and names)', type: 'radio', checked: sb.size === 'wide', click: () => set({ size: 'wide' }) }] },
+    { type: 'separator' },
+    item('spaces', 'Spaces'),
+    item('pinned', 'Pinned sites'),
+    item('collections', 'Collections'),
+    item('focus', 'Focus'),
+    item('command', 'Command Center'),
+    { type: 'separator' },
+    { label: 'Hide sidebar', accelerator: 'CmdOrCtrl+Shift+E', click: () => set({ show: false }) },
+    { label: 'Customize Vexa…', click: () => win.runAction('customize') }
+  ];
+  Menu.buildFromTemplate(t).popup({ window: win.win });
+}
+
+/** Right-click on a pinned site in the sidebar. */
+function showPinnedMenu(win, url) {
+  const { spaces } = require('./spaces');
+  if (win.isPrivate) return;
+  const t = [
+    { label: 'Open', click: () => win.command('open-pinned', { url }) },
+    { label: 'Open in new tab', click: () => win.addTab({ url }) },
+    { type: 'separator' },
+    { label: 'Copy link', click: () => clipboard.writeText(url) },
+    { label: 'Unpin from this Space', click: () => spaces.removePinned(win.spaceId, url) }
+  ];
   Menu.buildFromTemplate(t).popup({ window: win.win });
 }
 
@@ -114,7 +214,7 @@ function showPageMenu(tab, params) {
 function moveItems(win, tab) {
   if (win.isPrivate) return [];
   const others = [...require('./app-controller').windows].filter((w) => w !== win && !w.isPrivate && !w.closing && !w.win.isDestroyed());
-  const items = [{ label: 'Move tab to new window', enabled: win.tabs.length > 1, click: () => win.moveTabToNewWindow(tab.id) }];
+  const items = [{ label: 'Move tab to new window', enabled: win.allTabs().length > 1, click: () => win.moveTabToNewWindow(tab.id) }];
   if (others.length) {
     items.push({
       label: 'Move tab to window',
@@ -122,6 +222,33 @@ function moveItems(win, tab) {
     });
   }
   return items;
+}
+
+/** "Move tab to Space ▸" and "Pin to this Space" (Spaces that share a session only). */
+function spaceItems(win, tab) {
+  if (win.isPrivate) return [];
+  const { spaces } = require('./spaces');
+  const here = spaces.get(tab.spaceId);
+  const out = [];
+  if (/^https?:/.test(tab.url) && here) out.push({ label: `Pin site to ${truncate(here.name, 24)}`, click: () => spaces.addPinned(here.id, { url: tab.url, title: tab.title }) });
+  const others = spaces.list().filter((s) => s.id !== tab.spaceId);
+  if (others.length) {
+    out.push({
+      label: 'Move tab to Space',
+      submenu: others.map((s) => ({
+        label: truncate(s.name, 40) + (s.isolated ? ' (isolated)' : ''),
+        enabled: !s.isolated && !(here && here.isolated),
+        click: () => {
+          try {
+            win.moveTabToSpace(tab.id, s.id);
+          } catch (e) {
+            win.toast(e.message);
+          }
+        }
+      }))
+    });
+  }
+  return out;
 }
 
 function showTabMenu(win, tab) {
@@ -136,6 +263,7 @@ function showTabMenu(win, tab) {
     { label: 'Duplicate', click: () => win.duplicateTab(tab.id) },
     { label: muted ? 'Unmute tab' : 'Mute tab', click: () => (tab.wc.setAudioMuted(!muted), tab.changed()) },
     { label: bookmarks.isBookmarked(tab.url) ? 'Remove bookmark' : 'Bookmark tab', enabled: /^(https?|file):/.test(tab.url), click: () => bookmarks.toggle(tab.url, tab.title) },
+    ...spaceItems(win, tab),
     { type: 'separator' },
     ...moveItems(win, tab),
     { type: 'separator' },
@@ -187,4 +315,4 @@ function showBookmarkMenu(win, id) {
   Menu.buildFromTemplate(t).popup({ window: win.win });
 }
 
-module.exports = { showPageMenu, showTabMenu, showBookmarkFolderMenu, showBookmarkMenu };
+module.exports = { showPageMenu, showTabMenu, showBookmarkFolderMenu, showBookmarkMenu, showSpaceMenu, showSidebarMenu, showPinnedMenu };

@@ -87,6 +87,19 @@ function handler(req, res) {
       return send(200, 'text/html', page('First party check', `<h1 id="r">${req.headers.cookie || 'none'}</h1>`));
     case '/headers':
       return send(200, 'application/json', JSON.stringify(req.headers));
+    // Reader view: an article between navigation and ads, with markup that must not survive.
+    case '/article': {
+      const para = (n) => `<p>Paragraph ${n} of the Vexa reader test. Reading mode should keep this sentence, with its commas, full stops, and plenty of words, so that the extractor scores it as article text rather than chrome.</p>`;
+      return send(200, 'text/html', page('Reader Test Article', `<nav class="menu"><a href="/">Home</a> <a href="/page2">Menu link</a></nav>
+        <div class="ad-banner">BUY NOW advertisement</div>
+        <article><h1>The Reader Test Article</h1><p class="byline">By Test Author</p>
+          ${Array.from({ length: 14 }, (_, i) => para(i + 1)).join('')}
+          <p>Safe <a href="/page2">link</a> and a <a href="javascript:window.__pwned=1">bad link</a>.</p>
+          <img src="/favicon.svg" width="200" onerror="window.__pwned=1" alt="figure">
+          <script>window.__inArticle = 1;</script>
+        </article>
+        <aside class="sidebar">Related: other stories</aside>`, '<meta name="author" content="Test Author">'));
+    }
     case '/__cookielog':
       return send(200, 'application/json', JSON.stringify(cookieLog));
     default:

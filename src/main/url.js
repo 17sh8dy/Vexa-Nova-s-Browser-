@@ -13,7 +13,61 @@ const SEARCH_ENGINES = {
   vexa: { name: 'Vexa Search (Beta)', url: 'vexa://search/?q=%s', beta: true }
 };
 
-const INTERNAL_PAGES = ['newtab', 'settings', 'history', 'bookmarks', 'downloads'];
+const INTERNAL_PAGES = ['newtab', 'settings', 'history', 'bookmarks', 'downloads', 'collections', 'reader'];
+
+// Built-in address-bar scope filters: "@tabs foo" only looks through open tabs, etc.
+const SCOPES = {
+  tabs: 'Open tabs',
+  bookmarks: 'Bookmarks',
+  history: 'History',
+  collections: 'Collections',
+  spaces: 'Spaces'
+};
+
+/**
+ * "@key rest" → { key, rest, kind: 'scope'|'engine', shortcut? }, or null.
+ * `shortcuts` = [{ key, name, url }] (url contains %s).
+ */
+function parseKeyword(raw, shortcuts = []) {
+  const m = /^@([a-z0-9]{1,12})(?:\s+([\s\S]*))?$/i.exec(String(raw || '').trimStart());
+  if (!m) return null;
+  const key = m[1].toLowerCase();
+  const rest = (m[2] || '').trim();
+  if (Object.hasOwn(SCOPES, key)) return { key, rest, kind: 'scope', name: SCOPES[key] };
+  const shortcut = shortcuts.find((s) => s.key === key);
+  return shortcut ? { key, rest, kind: 'engine', shortcut, name: shortcut.name } : null;
+}
+
+// Google's own hosts, where the optional Chrome-brand compatibility mode applies.
+const GOOGLE_HOST = /(^|\.)(google\.[a-z.]+|youtube\.com|gstatic\.com|googleusercontent\.com)$/i;
+function isGoogleHost(host) {
+  return GOOGLE_HOST.test(String(host || ''));
+}
+
+/** "Sign in with Google" (Google Identity Services) endpoints that need the user's Google cookies when embedded. */
+function isGoogleSignInUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && u.hostname === 'accounts.google.com' && (u.pathname.startsWith('/gsi/') || u.pathname.startsWith('/o/oauth2/'));
+  } catch {
+    return false;
+  }
+}
+
+/** Client Hints brand headers for the Chrome compatibility mode. */
+function googleBrandHeaders(chromeVersion) {
+  const full = String(chromeVersion || '130.0.0.0');
+  const major = full.split('.')[0];
+  return {
+    'sec-ch-ua': `"Chromium";v="${major}", "Google Chrome";v="${major}", "Not.A/Brand";v="99"`,
+    'sec-ch-ua-full-version-list': `"Chromium";v="${full}", "Google Chrome";v="${full}", "Not.A/Brand";v="99.0.0.0"`
+  };
+}
+
+/** Fill a "%s" search template. */
+function fillTemplate(template, query) {
+  return template.replace('%s', encodeURIComponent(query));
+}
 const NEWTAB_URL = 'vexa://newtab/';
 
 // Schemes we pass straight through when typed.
@@ -51,9 +105,19 @@ function looksLikeHost(host) {
  * Turn what the user typed into a URL to load.
  * @returns {{ url: string, type: 'url'|'search'|'blocked'|'empty' }}
  */
-function resolveInput(raw, engineId = 'duckduckgo') {
+function resolveInput(raw, engineId = 'duckduckgo', { shortcuts = null } = {}) {
   const input = String(raw || '').trim();
   if (!input) return { url: '', type: 'empty' };
+
+  // Keyword shortcuts ("@g cats") and scope filters ("@tabs mail").
+  if (shortcuts && input.startsWith('@')) {
+    const kw = parseKeyword(input, shortcuts);
+    if (kw && kw.kind === 'scope') return { url: '', type: 'scope', scope: kw.key, query: kw.rest };
+    if (kw && kw.kind === 'engine') {
+      if (!kw.rest) return { url: '', type: 'empty' };
+      return { url: fillTemplate(kw.shortcut.url, kw.rest), type: 'search', query: kw.rest, engine: kw.key };
+    }
+  }
 
   const lower = input.toLowerCase();
 
@@ -85,7 +149,7 @@ function resolveInput(raw, engineId = 'duckduckgo') {
           if ((u.protocol === 'http:' || u.protocol === 'https:') && !u.hostname) throw new Error('no host');
           return { url: u.href, type: 'url' };
         } catch {
-          return { url: searchUrl(input, engineId), type: 'search' };
+          return { url: searchUrl(input, engineId), type: 'search', query: input, engine: engineId };
         }
       }
     }
@@ -106,7 +170,7 @@ function resolveInput(raw, engineId = 'duckduckgo') {
     }
   }
 
-  return { url: searchUrl(input, engineId), type: 'search' };
+  return { url: searchUrl(input, engineId), type: 'search', query: input, engine: engineId };
 }
 
 /** URL shown to the user in the address bar. */
@@ -148,6 +212,12 @@ module.exports = {
   SEARCH_ENGINES,
   INTERNAL_PAGES,
   NEWTAB_URL,
+  SCOPES,
+  isGoogleHost,
+  isGoogleSignInUrl,
+  googleBrandHeaders,
+  parseKeyword,
+  fillTemplate,
   resolveInput,
   searchUrl,
   displayUrl,

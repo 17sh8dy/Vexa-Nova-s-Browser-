@@ -71,8 +71,13 @@ if (!app.requestSingleInstanceLock()) {
     const { extensions } = require('./extensions');
     const { sync } = require('./sync');
     settings.init();
+    require('./shortcuts').setCommandKey(settings.get('commandCenterKey'));
     require('./shields').shields.init();
     require('./wallpapers').wallpapers.init();
+    require('./atmosphere').atmosphere.init();
+    require('./spaces').spaces.init();
+    require('./collections').collections.init();
+    require('./search-history').searchHistory.init();
     history.init();
     bookmarks.init();
     downloads.init();

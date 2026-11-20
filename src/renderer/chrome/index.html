@@ -8,9 +8,13 @@
   <link rel="stylesheet" href="chrome.css" />
 </head>
 <body>
+  <!-- Atmosphere: optional wallpaper + animated background effect behind the browser UI. -->
+  <div id="atmo-bg" class="atmo-bg" aria-hidden="true"><div class="atmo-wp"></div><canvas id="atmo-canvas"></canvas><div class="atmo-fx"></div></div>
   <div id="chrome">
     <header id="tabstrip">
       <div class="caption-spacer-left"></div>
+      <button id="space-chip" class="space-chip" title="Spaces (Ctrl+Shift+1…9)" aria-label="Current Space" hidden></button>
+      <div id="focus-title" class="focus-title" hidden></div>
       <div id="tabs" role="tablist" aria-label="Tabs"></div>
       <button id="new-tab" class="strip-btn" title="New tab (Ctrl+T)" aria-label="New tab"></button>
       <div class="drag-fill"></div>
@@ -33,10 +37,13 @@
           <div id="url-display" class="url-display" aria-hidden="true"></div>
         </div>
         <button id="zoom-badge" class="omni-btn zoom-badge" title="Reset zoom (Ctrl+0)" hidden></button>
+        <button id="reader-btn" class="omni-btn" title="Reader view (F9)" aria-label="Reader view" hidden></button>
+        <button id="collect-btn" class="omni-btn" title="Save to a collection (Ctrl+Shift+S)" aria-label="Save to a collection" hidden></button>
         <button id="star" class="omni-btn" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark this page"></button>
       </div>
 
       <button id="shields-btn" class="tb-btn shields-btn" title="Vexa Shields" aria-label="Vexa Shields" hidden><span class="sh-icon"></span><span class="sh-badge" hidden></span></button>
+      <button id="focus-chip" class="focus-chip" title="Focus session" hidden><span class="fc-icon"></span><span class="fc-time"></span></button>
 
       <div class="nav-group right">
         <button id="downloads-btn" class="tb-btn" title="Downloads (Ctrl+J)" aria-label="Downloads" hidden>
@@ -78,6 +85,36 @@
     </div>
   </div>
 
+  <!-- Sidebar: Spaces, the Space's pinned sites, Collections, Focus, Command Center. -->
+  <aside id="sidebar" class="sidebar" aria-label="Sidebar" hidden>
+    <div class="sb-spaces" id="sb-spaces"></div>
+    <button class="sb-btn sb-add" id="sb-add" title="New Space" aria-label="New Space"></button>
+    <div class="sb-sep" id="sb-sep-pinned"></div>
+    <div class="sb-pinned" id="sb-pinned"></div>
+    <div class="sb-fill"></div>
+    <button class="sb-btn" id="sb-command" title="Command Center" aria-label="Command Center"></button>
+    <button class="sb-btn" id="sb-collections" title="Collections" aria-label="Collections"></button>
+    <button class="sb-btn" id="sb-focus" title="Focus" aria-label="Focus"></button>
+    <button class="sb-btn" id="sb-customize" title="Customize Vexa" aria-label="Customize Vexa"></button>
+  </aside>
+
+  <!-- Research panel: a Collection beside the page, with notes and clipping. -->
+  <aside id="research" class="research" aria-label="Research panel" hidden>
+    <header class="rs-head">
+      <span class="rs-icon"></span>
+      <select id="rs-collection" aria-label="Collection"></select>
+      <button class="fb-btn" id="rs-close" title="Close research panel"></button>
+    </header>
+    <div class="rs-actions">
+      <button class="ib-btn" id="rs-save">Save page</button>
+      <button class="ib-btn" id="rs-clip">Clip selection</button>
+    </div>
+    <div class="rs-note"><textarea id="rs-text" placeholder="Write a note… (Ctrl+Enter to add)" rows="3"></textarea></div>
+    <div class="rs-list" id="rs-list"></div>
+  </aside>
+
+
+
   <main id="panel" class="panel" hidden>
     <div class="panel-inner">
       <div class="panel-mark"></div>
@@ -89,10 +126,14 @@
         <button id="panel-back" class="btn">Go back</button>
       </div>
       <button id="panel-proceed" class="panel-proceed" hidden>I understand the risk. Continue to this site</button>
+      <button id="panel-allow" class="panel-proceed" hidden>Allow this site for 5 minutes</button>
     </div>
   </main>
 
   <script src="../shared/icons.js"></script>
+  <script src="../shared/palettes.js"></script>
+  <script src="../shared/sound-engine.js"></script>
   <script src="chrome.js"></script>
+  <script src="panels.js"></script>
 </body>
 </html>

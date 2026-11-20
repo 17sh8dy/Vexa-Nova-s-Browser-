@@ -13,7 +13,11 @@ const EVENTS = new Set([
   'popup:show',
   'popup:update',
   'popup:hide',
-  'status:show'
+  'status:show',
+  'atmo:play',
+  'status:toast',
+  'space-switched',
+  'look'
 ]);
 
 contextBridge.exposeInMainWorld('vexaChrome', {

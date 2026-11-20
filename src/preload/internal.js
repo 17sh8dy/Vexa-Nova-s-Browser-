@@ -31,20 +31,21 @@ if (location.protocol === 'vexa:' && location.hostname !== 'search') {
   // ------------------------------------------------------------------ Vexa Shields: fingerprinting
   // Ask the main process (synchronously, before any page script runs) whether this site
   // has fingerprinting protection on, then install it in the page's world.
+  let pageCfg = null;
   try {
-    const cfg = ipcRenderer.sendSync('vexa:shields-page');
-    if (cfg && cfg.fingerprinting && typeof contextBridge.executeInMainWorld === 'function') {
-      contextBridge.executeInMainWorld({ func: protect, args: [cfg.seed >>> 0, (api) => ipcRenderer.send('vexa:shields-fp', String(api).slice(0, 20))] });
+    pageCfg = ipcRenderer.sendSync('vexa:shields-page');
+    if (pageCfg && pageCfg.fingerprinting && typeof contextBridge.executeInMainWorld === 'function') {
+      contextBridge.executeInMainWorld({ func: protect, args: [pageCfg.seed >>> 0, (api) => ipcRenderer.send('vexa:shields-fp', String(api).slice(0, 20))] });
     }
   } catch (err) {
     console.warn('[vexa] fingerprinting protection unavailable:', err && err.message);
   }
 
-  // ------------------------------------------------------------------ Google sign-in
-  // Google refuses sign-in from browsers it can't recognise as Chrome. The user agent
-  // and Client Hints headers are fixed in the main process; this makes the JavaScript
-  // view (navigator.userAgentData) agree with them, on Google's sign-in hosts only.
-  if (/(^|\.)(google\.[a-z.]+|youtube\.com)$/i.test(location.hostname)) {
+  // ------------------------------------------------------------------ Google sign-in (compatibility mode)
+  // Optional (Settings → Compatibility, see docs/COMPATIBILITY.md): the Client Hints headers
+  // carry the Chrome brand on Google's hosts; this makes navigator.userAgentData agree with
+  // them there. Off = Vexa reports the honest Chromium brand list everywhere.
+  if (pageCfg && pageCfg.googleCompat && /(^|\.)(google\.[a-z.]+|youtube\.com)$/i.test(location.hostname)) {
     try {
       webFrame.executeJavaScript(`(() => {
         const nav = navigator;

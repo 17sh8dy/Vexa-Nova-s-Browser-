@@ -20,6 +20,18 @@ const { sync } = require('./sync');
 const defaultBrowser = require('./default-browser');
 const { shields } = require('./shields');
 const { wallpapers } = require('./wallpapers');
+const { atmosphere } = require('./atmosphere');
+const { spaces } = require('./spaces');
+const { collections } = require('./collections');
+const { reader } = require('./reader');
+const { searchHistory } = require('./search-history');
+const { DEFAULT_SEARCH_SHORTCUTS } = require('./settings');
+
+// Internal pages that show content from the web get only the calls they need.
+// vexa://reader renders an article extracted from a website: reader.* and two helpers.
+const PAGE_ALLOW = {
+  reader: (m) => m.startsWith('reader.') || m === 'atmosphere.look' || m === 'nav.open'
+};
 
 const RANGES = { hour: 3600e3, day: 86400e3, week: 7 * 86400e3, month: 28 * 86400e3 };
 const str = (v, max = 2000) => (typeof v === 'string' && v.length <= max ? v : '');
@@ -59,7 +71,7 @@ const api = {
   'shields.lifetime': () => shields.lifetime(),
 
   // New Tab page: wallpaper + layout
-  'ntp.get': (ctx) => wallpapers.pageData(ctx.win.isPrivate),
+  'ntp.get': (ctx) => wallpapers.pageData(ctx.win.isPrivate, ctx.tab && !ctx.win.isPrivate ? spaces.get(ctx.tab.spaceId) : null),
   'ntp.set': (_ctx, patch) => settings.set('newTab', patch && typeof patch === 'object' ? patch : {}),
   'ntp.reset': () => wallpapers.reset(),
   'wallpaper.choose': (_ctx, kind, id) => wallpapers.choose(str(kind, 20), str(id, 100)),
@@ -203,13 +215,171 @@ const api = {
 
   // navigation from internal pages (new tab page search box, history links with modifiers)
   'nav.open': (ctx, input, disposition = 'current') => {
-    const r = resolveInput(String(input), settings.get('searchEngine'));
+    const r = resolveInput(String(input), settings.get('searchEngine'), { shortcuts: settings.get('searchShortcuts') });
+    if (r.type === 'scope') {
+      ctx.win.runAction('command-center', { payload: { query: String(input) } });
+      return true;
+    }
     if (!r.url) return false;
+    if (r.type === 'search' && !ctx.win.isPrivate) searchHistory.add(r.query, r.engine);
     if (disposition === 'current' && ctx.tab) ctx.tab.loadURL(r.url);
     else ctx.win.navigate(r.url, { disposition: disposition === 'background' ? 'background' : 'new-tab' });
     return true;
   },
   'nav.focusAddress': (ctx) => ctx.win.focusAddress(),
+  'nav.commandCenter': (ctx, query = '') => ctx.win.runAction('command-center', { payload: { query: str(query, 300) } }),
+
+  // ---- 0.90: Vexa Atmosphere
+  'atmosphere.get': (ctx) => ({
+    config: settings.get('atmosphere'),
+    sidebar: settings.get('sidebar'),
+    presets: atmosphere.presets(),
+    sounds: atmosphere.sounds(),
+    palettes: Object.entries(require('../renderer/shared/palettes').PALETTES).map(([id, p]) => ({ id, name: p.name, desc: p.desc, swatch: (p.dark['--accent'] || '#8b5cf6'), strip: p.dark['--strip'] || '#0e0c15' })),
+    look: ctx.win.look(),
+    space: ctx.win.space ? { id: ctx.win.space.id, name: ctx.win.space.name, look: ctx.win.space.look } : null
+  }),
+  'atmosphere.look': (ctx) => ctx.win.look(),
+  'atmosphere.set': (_ctx, patch) => atmosphere.update(patch),
+  'atmosphere.preset': (_ctx, id) => atmosphere.applyPreset(str(id, 20)),
+  'atmosphere.reset': () => atmosphere.reset(),
+  'atmosphere.importSound': async (ctx) => {
+    const res = await dialog.showOpenDialog(parentOf(ctx), { title: 'Import a sound', filters: [{ name: 'Audio (MP3, WAV, OGG, FLAC, M4A, WebM)', extensions: ['mp3', 'wav', 'ogg', 'oga', 'opus', 'flac', 'm4a', 'aac', 'mp4', 'webm'] }], properties: ['openFile'] });
+    if (res.canceled || !res.filePaths[0]) return null;
+    return { path: res.filePaths[0], bytes: fs.readFileSync(res.filePaths[0]).subarray(0, 2 * 1024 * 1024 + 1), name: require('path').basename(res.filePaths[0]) };
+  },
+  'atmosphere.saveSound': (_ctx, name, bytes, duration) => atmosphere.importBytes(str(name, 300), bytes, Number(duration)),
+  'atmosphere.removeSound': (_ctx, id) => atmosphere.removeSound(str(id, 16)),
+  'atmosphere.soundBytes': (_ctx, id) => atmosphere.bytes(str(id, 16)),
+  'sidebar.set': (_ctx, patch) => settings.set('sidebar', patch && typeof patch === 'object' ? patch : {}),
+
+  // ---- Spaces
+  'spaces.list': (ctx) => ({ spaces: spaces.list(), current: ctx.win.isPrivate ? null : ctx.win.spaceId, tabSpace: ctx.tab ? ctx.tab.spaceId : null, meta: spaces.meta(), saved: spaces.saved() }),
+  'spaces.create': (ctx, data) => {
+    const s = spaces.create(data && typeof data === 'object' ? data : {});
+    return s;
+  },
+  'spaces.update': (_ctx, id, patch) => spaces.update(str(id, 40), patch && typeof patch === 'object' ? patch : {}),
+  'spaces.remove': (_ctx, id) => spaces.remove(str(id, 40)),
+  'spaces.move': (_ctx, id, index) => spaces.move(str(id, 40), Number(index)),
+  'spaces.switch': (ctx, id) => ctx.win.switchSpace(str(id, 40)),
+  'spaces.removeSaved': (_ctx, id) => spaces.removeSaved(str(id, 40)),
+  'spaces.restoreSaved': (ctx, id) => require('./command-center').commandCenter.run(ctx.win, { run: { kind: 'saved-session', id: str(id, 40) } }),
+  'spaces.pinned': (_ctx, id, op, data) => (op === 'remove' ? spaces.removePinned(str(id, 40), str(data, 2048)) : spaces.addPinned(str(id, 40), { url: str(data?.url, 2048), title: str(data?.title, 200) })),
+
+  // ---- Collections
+  'collections.list': () => collections.summaries(),
+  'collections.view': (_ctx, id) => collections.view(str(id, 40)),
+  'collections.create': (_ctx, data) => collections.create({ name: str(data?.name, 80), description: str(data?.description, 1000) }),
+  'collections.update': (_ctx, id, patch) => collections.update(str(id, 40), patch && typeof patch === 'object' ? patch : {}),
+  'collections.remove': (_ctx, id) => collections.remove(str(id, 40)),
+  'collections.move': (_ctx, id, index) => collections.move(str(id, 40), Number(index)),
+  'collections.addItem': (_ctx, id, item) => collections.addItem(str(id, 40), item && typeof item === 'object' ? { type: item.type, title: item.title, url: item.url, note: item.note } : {}),
+  'collections.updateItem': (_ctx, id, itemId, patch) => collections.updateItem(str(id, 40), str(itemId, 40), patch && typeof patch === 'object' ? patch : {}),
+  'collections.removeItem': (_ctx, id, itemId) => collections.removeItem(str(id, 40), str(itemId, 40)),
+  'collections.moveItem': (_ctx, from, itemId, to, index) => collections.moveItem(str(from, 40), str(itemId, 40), str(to, 40), index == null ? null : Number(index)),
+  'collections.addFileData': (_ctx, id, name, bytes) => collections.addFileBytes(str(id, 40), str(name, 300), bytes),
+  'collections.addFiles': async (ctx, id) => {
+    const res = await dialog.showOpenDialog(parentOf(ctx), { title: 'Add files to the collection', properties: ['openFile', 'multiSelections'] });
+    if (res.canceled) return 0;
+    let n = 0;
+    for (const f of res.filePaths.slice(0, 50)) {
+      collections.addFilePath(str(id, 40), f);
+      n++;
+    }
+    return n;
+  },
+  'collections.openItem': (_ctx, id, itemId, reveal) => collections.openItem(str(id, 40), str(itemId, 40), { reveal: !!reveal }),
+  'collections.search': (_ctx, text) => collections.search(str(text, 200), 60),
+  'collections.export': async (ctx, ids) => {
+    const bundle = collections.exportBundle(Array.isArray(ids) ? ids.map((x) => str(x, 40)) : []);
+    const res = await dialog.showSaveDialog(parentOf(ctx), { title: 'Export collections', defaultPath: 'vexa-collections.json', filters: [{ name: 'Vexa collections', extensions: ['json'] }] });
+    if (res.canceled || !res.filePath) return null;
+    fs.writeFileSync(res.filePath, JSON.stringify(bundle));
+    return res.filePath;
+  },
+  'collections.import': async (ctx) => {
+    const res = await dialog.showOpenDialog(parentOf(ctx), { title: 'Import collections (a Vexa collections .json file)', filters: [{ name: 'Vexa collections', extensions: ['json'] }], properties: ['openFile'] });
+    if (res.canceled || !res.filePaths[0]) return null;
+    const st = fs.statSync(res.filePaths[0]);
+    if (st.size > 450 * 1024 * 1024) throw new Error('That file is too large');
+    return collections.importBundle(JSON.parse(fs.readFileSync(res.filePaths[0], 'utf8')));
+  },
+
+  // ---- Reader view (also callable from vexa://reader, which gets only reader.* — see PAGE_ALLOW)
+  'reader.get': (_ctx, token) => reader.get(str(token, 40)),
+  'reader.prefs': () => settings.get('focus').reader,
+  'reader.setPrefs': (_ctx, patch) => settings.set('focus', { reader: patch && typeof patch === 'object' ? patch : {} }).reader,
+  'reader.sitePref': (_ctx, site, key, value) => reader.setSitePref(str(site, 255), str(key, 20), !!value),
+  'reader.getSitePref': (_ctx, site) => settings.get('focus').sitePrefs[str(site, 255)] || {},
+  // The registrable domain ("site") for a URL, decided with the Public Suffix List.
+  'reader.siteOf': (_ctx, url) => require('./url').siteOf(require('./url').hostOf(str(url, 2048))) || '',
+  'reader.leave': (ctx) => ctx.tab && reader.leave(ctx.tab),
+  'reader.save': (ctx, token) => {
+    const a = reader.get(str(token, 40));
+    if (!a) throw new Error('This article is no longer available');
+    const c = collections.get(collections.lastUsedId()) || collections.ensureDefault('Reading list');
+    collections.addItem(c.id, { type: 'article', title: a.title, url: a.url, note: [a.byline, a.site].filter(Boolean).join(' · ') });
+    return c.name;
+  },
+  'reader.collections': () => collections.summaries().map((c) => ({ id: c.id, name: c.name })),
+
+  // ---- Search
+  'search.history': () => searchHistory.list(200),
+  'search.removeHistory': (_ctx, q) => searchHistory.remove(str(q, 300)),
+  'search.clearHistory': () => searchHistory.clear(),
+  'search.resetShortcuts': () => settings.set('searchShortcuts', structuredClone(DEFAULT_SEARCH_SHORTCUTS)),
+
+  // ---- New Tab widgets
+  'ntp.recent': (_ctx, n = 8) => {
+    const seen = new Set();
+    const out = [];
+    for (const h of history.query({ limit: 200 })) {
+      const o = originOf(h.url);
+      if (!/^https?:/.test(h.url) || seen.has(h.url) || seen.has(o)) continue;
+      seen.add(h.url);
+      seen.add(o);
+      out.push({ url: h.url, title: h.title, favicon: h.favicon, time: h.time });
+      if (out.length >= Math.min(Number(n) || 8, 16)) break;
+    }
+    return out;
+  },
+  'ntp.addFavorite': (_ctx, fav) => {
+    const list = settings.get('newTab').favoritesList.slice();
+    const url = str(fav?.url, 2047);
+    if (!/^https?:\/\//i.test(url)) throw new Error('Favorites need a web address (https://…)');
+    if (list.length >= 24) throw new Error('You can have up to 24 favorites');
+    if (!list.some((f) => f.url === url)) list.push({ url, title: str(fav?.title, 120) || url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] });
+    return settings.set('newTab', { favoritesList: list }).favoritesList;
+  },
+  'ntp.removeFavorite': (_ctx, url) => settings.set('newTab', { favoritesList: settings.get('newTab').favoritesList.filter((f) => f.url !== url) }).favoritesList,
+  'ntp.moveFavorite': (_ctx, url, index) => {
+    const list = settings.get('newTab').favoritesList.slice();
+    const i = list.findIndex((f) => f.url === url);
+    if (i < 0) return list;
+    const [f] = list.splice(i, 1);
+    list.splice(Math.max(0, Math.min(Number(index) || 0, list.length)), 0, f);
+    return settings.set('newTab', { favoritesList: list }).favoritesList;
+  },
+  'ntp.weather': (ctx) => {
+    const cfg = settings.get('newTab');
+    if (!cfg.weather || !cfg.weatherCity || ctx.win.isPrivate) return null;
+    return require('./weather').current(cfg.weatherCity, cfg.weatherUnit);
+  },
+  'ntp.geocode': (_ctx, name) => require('./weather').geocode(str(name, 80)),
+
+  // ---- Compatibility report (Settings → Compatibility)
+  'app.compat': () => {
+    const c = require('electron').components;
+    return {
+      widevine: { build: !!c && typeof c.whenReady === 'function', status: c && typeof c.status === 'function' ? c.status() : null },
+      electron: process.versions.electron,
+      chrome: process.versions.chrome,
+      userAgent: require('./sessions').cleanUserAgent(),
+      googleCompat: settings.get('googleCompat'),
+      googleSignInButtons: settings.get('googleSignInButtons')
+    };
+  },
 
   'app.info': () => ({
     name: 'Vexa',
@@ -262,9 +432,10 @@ function register() {
   ipcMain.on('vexa:shields-page', (event) => {
     try {
       const frameUrl = event.senderFrame?.url || '';
-      event.returnValue = event.senderFrame === event.sender.mainFrame ? shields.pageConfig(event.sender.session, frameUrl) : { fingerprinting: false };
+      const base = event.senderFrame === event.sender.mainFrame ? shields.pageConfig(event.sender.session, frameUrl) : { fingerprinting: false };
+      event.returnValue = { ...base, googleCompat: !!settings.get('googleCompat') };
     } catch {
-      event.returnValue = { fingerprinting: false };
+      event.returnValue = { fingerprinting: false, googleCompat: false };
     }
   });
   ipcMain.on('vexa:shields-fp', (event, apiName) => {
@@ -277,8 +448,15 @@ function register() {
     if (!frameUrl.startsWith('vexa://') || frameUrl.startsWith('vexa://search')) throw new Error('Not allowed');
     const { win, tab } = controller.windowForWebContents(event.sender);
     if (!win || !tab) throw new Error('Unknown sender');
-    const fn = api[method];
+    const fn = Object.hasOwn(api, method) ? api[method] : null;
     if (!fn) throw new Error(`Unknown API ${method}`);
+    let page = '';
+    try {
+      page = new URL(frameUrl).hostname;
+    } catch {
+      throw new Error('Not allowed');
+    }
+    if (PAGE_ALLOW[page] && !PAGE_ALLOW[page](String(method))) throw new Error('Not allowed');
     return fn({ win, tab }, ...args);
   });
 }

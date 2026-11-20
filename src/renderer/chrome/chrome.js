@@ -44,14 +44,21 @@
   function reportLayout() {
     const h = chromeEl.getBoundingClientRect().height;
     const tb = toolbarEl.getBoundingClientRect().bottom;
+    // Sidebar / research panel widths (panels.js) inset the page horizontally.
+    const ins = (window.__vexaInsets && window.__vexaInsets()) || { left: 0, right: 0 };
     document.documentElement.style.setProperty('--chrome-h', h + 'px');
-    api.layout({ chromeHeight: h, toolbarBottom: tb });
+    document.documentElement.style.setProperty('--inset-l', ins.left + 'px');
+    document.documentElement.style.setProperty('--inset-r', ins.right + 'px');
+    api.layout({ chromeHeight: h, toolbarBottom: tb, insetLeft: ins.left, insetRight: ins.right });
   }
   new ResizeObserver(reportLayout).observe(chromeEl);
   window.addEventListener('resize', reportLayout);
 
   const cmd = (name, args) => api.cmd(name, args).catch((e) => console.error(name, e));
   const activeTab = () => state && state.tabs.find((t) => t.id === state.activeId);
+  // panels.js (sidebar, research, Atmosphere, focus) hooks into rendering through this.
+  const renderHooks = [];
+  window.VexaChrome = { cmd, anchorOf: (el) => anchorOf(el), onRender: (fn) => renderHooks.push(fn), reportLayout, state: () => state, activeTab: () => activeTab(), MOD };
 
   // ------------------------------------------------------------------ tabs
   const tabsEl = $('#tabs');
@@ -397,6 +404,7 @@
     const res = await api.cmd('suggest', { text });
     if (seq !== suggestSeq || !omni.focused) return;
     omni.items = res.items || [];
+    omni.scope = res.scope || null;
     omni.selected = omni.items.length ? 0 : -1;
     // Inline autocomplete, only while the caret is at the end of what was typed.
     if (allowInline && res.inline && address.value === text && address.selectionStart === text.length) {
@@ -415,6 +423,7 @@
     const r = omnibox.getBoundingClientRect();
     cmd('show-suggestions', {
       items: omni.items,
+      scope: omni.scope,
       selected: omni.inline ? -2 : omni.selected,
       anchor: { x: r.left, y: r.top, width: r.width, height: r.height }
     });
@@ -426,6 +435,17 @@
 
   function commitNavigation(disposition) {
     let target;
+    const sel = omni.items[omni.selected];
+    // Tabs, Spaces and scope results ("@tabs …") are picked, not navigated to by text.
+    if (sel && !(omni.inline && address.selectionStart !== address.selectionEnd) && (omni.selected > 0 || sel.pick) && (sel.tab || sel.space || sel.pick || sel.type === 'recent' || (sel.type === 'search' && !sel.primary))) {
+      if (sel.type === 'info') return;
+      omni.editing = false;
+      omni.inline = null;
+      closeSuggestions();
+      cmd('pick', { item: sel, disposition });
+      address.blur();
+      return;
+    }
     if (omni.inline && address.selectionStart !== address.selectionEnd) {
       target = omni.inline.url;
     } else if (omni.selected > 0 && omni.items[omni.selected]) {
@@ -477,7 +497,8 @@
       }
       omni.selected = e.key === 'ArrowDown' ? (omni.selected + 1) % n : (omni.selected - 1 + n) % n;
       const item = omni.items[omni.selected];
-      if (item) address.value = item.type === 'search' ? item.title : item.url;
+      // Scoped lists (@tabs …) keep what was typed; ordinary items preview in the box.
+      if (item && !item.pick && !omni.scope && item.type !== 'info' && !item.tab && !item.space) address.value = item.type === 'search' || item.type === 'recent' ? item.title : item.url;
       showSuggestions();
     } else if (e.key === 'Backspace' || e.key === 'Delete') {
       if (omni.inline && address.selectionStart !== address.selectionEnd) {
@@ -706,8 +727,24 @@
     let desc;
     let code;
     const dangerous = !!(t.error && t.error.code === 'malicious');
+    const focusBlock = !!(t.error && t.error.code === 'focus');
     panel.classList.toggle('danger', dangerous);
+    panel.classList.toggle('focus', focusBlock);
     $('#panel-proceed').hidden = !dangerous;
+    $('#panel-allow').hidden = !focusBlock;
+    if (focusBlock) {
+      // Vexa Focus: a distracting site, held back during a focus session.
+      $('.panel-mark').innerHTML = I.target.replace('width="18" height="18"', 'width="56" height="56"');
+      $('#panel-title').textContent = 'Stay focused';
+      const f = state.focus;
+      $('#panel-desc').innerHTML = `<b>${host}</b> is on your distraction list, so Vexa is holding it back${f && f.name ? ` while you focus on <b>${escapeHtml(f.name)}</b>` : ' during this focus session'}. You can change the list in Settings → Focus.`;
+      $('#panel-code').textContent = 'VEXA_FOCUS_DISTRACTION';
+      $('#panel-back').hidden = false;
+      $('#panel-back').textContent = t.canGoBack ? 'Go back' : 'Open a New Tab';
+      $('#panel-back').classList.add('primary');
+      $('#panel-retry').hidden = true;
+      return;
+    }
     if (dangerous) {
       $('.panel-mark').innerHTML = I.danger.replace('width="18" height="18"', 'width="56" height="56"');
       $('#panel-title').textContent = 'Vexa Shields stopped a dangerous site';
@@ -753,10 +790,11 @@
   $('#panel-retry').addEventListener('click', () => cmd('action', { action: 'reload' }));
   $('#panel-back').addEventListener('click', () => {
     const t = activeTab();
-    if (t && t.error && t.error.code === 'malicious' && !t.canGoBack) cmd('navigate', { input: 'vexa://newtab/' });
+    if (t && t.error && (t.error.code === 'malicious' || t.error.code === 'focus') && !t.canGoBack) cmd('navigate', { input: 'vexa://newtab/' });
     else cmd('action', { action: 'back' });
   });
   $('#panel-proceed').addEventListener('click', () => cmd('shields-proceed'));
+  $('#panel-allow').addEventListener('click', () => cmd('focus', { op: 'allow' }));
 
   // ------------------------------------------------------------------ downloads button
   const dlBtn = $('#downloads-btn');
@@ -855,6 +893,13 @@
     renderShields(t);
     $('#menu-btn').classList.toggle('open', state.popup === 'menu');
     dlBtn.classList.toggle('open', state.popup === 'downloads');
+    for (const h of renderHooks) {
+      try {
+        h(state, t);
+      } catch (err) {
+        console.error(err);
+      }
+    }
     lastActiveId = state.activeId;
   }
 

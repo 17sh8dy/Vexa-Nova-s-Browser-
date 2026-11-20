@@ -57,6 +57,46 @@
     danger: s('<path d="M12 2.8 19.6 5.6v5.8c0 4.7-3.2 8.2-7.6 9.8-4.4-1.6-7.6-5.1-7.6-9.8V5.6z"/><path d="M12 8v5"/><circle cx="12" cy="16" r=".7" fill="currentColor"/>'),
     settings: s('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>', 'width="16" height="16"')
   };
+  // 0.90: Spaces, Collections, Focus, Command Center, Atmosphere, New Tab widgets.
+  Object.assign(window.VexaIcons, {
+    gamepad: s('<path d="M7.5 8h9a4.5 4.5 0 0 1 4.4 5.4l-.6 3a2.5 2.5 0 0 1-4.3 1.2L14.5 16h-5l-1.5 1.6a2.5 2.5 0 0 1-4.3-1.2l-.6-3A4.5 4.5 0 0 1 7.5 8z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="15.5" cy="11.5" r=".8" fill="currentColor"/><circle cx="17" cy="13.5" r=".8" fill="currentColor"/>'),
+    code: s('<path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4M13.5 5.5l-3 13"/>'),
+    book: s('<path d="M5 4.5h5.5A2.5 2.5 0 0 1 13 7v12.5a2 2 0 0 0-2-2H5z"/><path d="M19 4.5h-3.5A2.5 2.5 0 0 0 13 7v12.5a2 2 0 0 1 2-2h4z"/>'),
+    film: s('<rect x="4" y="4.5" width="16" height="15" rx="2.5"/><path d="M8 4.5v15M16 4.5v15M4 9h4M4 15h4M16 9h4M16 15h4"/>'),
+    briefcase: s('<rect x="3.5" y="7.5" width="17" height="11.5" rx="2.5"/><path d="M9 7.5V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v1.5M3.5 12.5h17"/>'),
+    heart: s('<path d="M12 19.5s-7.5-4.4-7.5-9.7A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6c0 5.3-7.5 9.7-7.5 9.7z"/>'),
+    music: s('<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/>'),
+    flask: s('<path d="M9.5 4h5M10.5 4v5.5L5.3 17.6A1.6 1.6 0 0 0 6.7 20h10.6a1.6 1.6 0 0 0 1.4-2.4L13.5 9.5V4"/><path d="M7.5 14.5h9"/>'),
+    cart: s('<path d="M3.5 4.5h2l2 10.5h10l2-7.5H7"/><circle cx="9" cy="19" r="1.3"/><circle cx="17" cy="19" r="1.3"/>'),
+    rocket: s('<path d="M14.5 4.5c3 0 5 2 5 5-2 4-5.5 6.5-8 7.5l-4-4c1-2.5 3.5-6 7-8.5z"/><circle cx="15" cy="9" r="1.5"/><path d="M7.5 13 4.5 14l2 4.5 4.5 2 1-3M6 18l-1.5 1.5"/>'),
+    leaf: s('<path d="M5 19c0-8 5-13.5 14.5-14.5C19 14 13.5 19 5.5 19z"/><path d="M5 19 13 11"/>'),
+    coffee: s('<path d="M5 9h11v5.5a4.5 4.5 0 0 1-4.5 4.5h-2A4.5 4.5 0 0 1 5 14.5z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5v2.5M11 3.5v2.5"/>'),
+    spaces: s('<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>', 'width="16" height="16"'),
+    collection: s('<path d="M4.5 7.5h15v11a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z"/><path d="M6.5 4.5h11M8.5 11.5h7"/>', 'width="16" height="16"'),
+    sidebar: s('<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9 4.5v15"/>', 'width="16" height="16"'),
+    reader: s('<path d="M4.5 5.5h15M4.5 9.5h15M4.5 13.5h10M4.5 17.5h7"/>', 'width="16" height="16"'),
+    command: s('<path d="M9 6.5a2.5 2.5 0 1 0-2.5 2.5H17.5A2.5 2.5 0 1 0 15 6.5v11a2.5 2.5 0 1 0 2.5-2.5h-11A2.5 2.5 0 1 0 9 17.5z"/>', 'width="16" height="16"'),
+    sparkle: s('<path d="M12 3.5 13.8 9 19.5 10.8 13.8 12.6 12 18.5 10.2 12.6 4.5 10.8 10.2 9z"/><path d="M18.5 3.5v3M17 5h3"/>', 'width="16" height="16"'),
+    window: s('<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/>', 'width="16" height="16"'),
+    tab: s('<path d="M3.5 19.5v-11A2.5 2.5 0 0 1 6 6h5l2 3h5a2.5 2.5 0 0 1 2.5 2.5v8"/><path d="M2.5 19.5h19"/>', 'width="16" height="16"'),
+    note: s('<path d="M6 4h9l4 4v12H6z"/><path d="M15 4v4h4M9 12h7M9 15.5h5"/>', 'width="16" height="16"'),
+    video: s('<rect x="3.5" y="6" width="12" height="12" rx="2.5"/><path d="m15.5 10.5 5-3v9l-5-3z"/>', 'width="16" height="16"'),
+    link: s('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>', 'width="16" height="16"'),
+    grip: s('<circle cx="9" cy="6.5" r="1" fill="currentColor"/><circle cx="15" cy="6.5" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="17.5" r="1" fill="currentColor"/><circle cx="15" cy="17.5" r="1" fill="currentColor"/>', 'width="14" height="14"'),
+    edit: s('<path d="M4.5 19.5h4l10-10a2.8 2.8 0 0 0-4-4l-10 10z"/><path d="m13.5 6.5 4 4"/>', 'width="14" height="14"'),
+    sound: s('<path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>', 'width="16" height="16"'),
+    vexa: s('<path d="M6 5.5 12 19l6-13.5"/>', 'width="16" height="16"'),
+    sun: s('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>'),
+    moon: s('<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>'),
+    cloud: s('<path d="M7 18.5h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 9.6 4.5 4.5 0 0 0 7 18.5z"/>'),
+    cloudSun: s('<path d="M8 19h9a3.5 3.5 0 0 0 .4-7A5 5 0 0 0 8 11.1 4 4 0 0 0 8 19z"/><path d="M6.5 4.5v1.5M2.5 8.5H4M3.6 5.6l1 1M10.5 6.2a3.5 3.5 0 0 0-6 2.6"/>'),
+    rain: s('<path d="M7 15.5h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 6.6 4.5 4.5 0 0 0 7 15.5z"/><path d="m9 18-1 2.5M13 18l-1 2.5M17 18l-1 2.5"/>'),
+    snow: s('<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 6.1 4.5 4.5 0 0 0 7 15z"/><path d="M9 18.5h.01M13 18.5h.01M17 18.5h.01M11 21h.01M15 21h.01" stroke-width="2.4"/>'),
+    storm: s('<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 6.1 4.5 4.5 0 0 0 7 15z"/><path d="m12.5 15.5-2 3.5h3l-2 3.5"/>'),
+    fog: s('<path d="M4.5 9.5h15M3.5 13h17M5.5 16.5h13M8 20h8"/>')
+  });
+  // Space icons by name (see spaces.js ICONS).
+  window.VexaSpaceIcon = (name) => window.VexaIcons[name === 'star' ? 'star' : name] || window.VexaIcons.star;
   // Brand mark (used in the browser UI).
   window.VexaMark = (size = 18) =>
     `<svg viewBox="0 0 64 64" width="${size}" height="${size}" aria-hidden="true"><defs><linearGradient id="vxl${size}" x1="0" y1="0" x2=".4" y2="1"><stop offset="0" stop-color="#ede9fe"/><stop offset=".55" stop-color="#a78bfa"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient><linearGradient id="vxr${size}" x1="1" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#a855f7"/><stop offset="1" stop-color="#5b21b6"/></linearGradient></defs><path d="M46 14 L32 48" stroke="url(#vxr${size})" stroke-width="10" stroke-linecap="round" fill="none"/><path d="M18 14 L32 48" stroke="url(#vxl${size})" stroke-width="10" stroke-linecap="round" fill="none"/><path d="M52 2 Q53 8 58 9 Q53 10 52 16 Q51 10 46 9 Q51 8 52 2 Z" fill="#c4b5fd"/></svg>`;

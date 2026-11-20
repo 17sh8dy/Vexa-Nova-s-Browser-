@@ -84,11 +84,16 @@ class Wallpapers {
     return pool[h % pool.length];
   }
 
-  pageData(isPrivate) {
+  /** Everything the New Tab page needs. `space` (optional) can give the page its own wallpaper. */
+  pageData(isPrivate, space = null) {
+    const own = space && space.look && space.look.wallpaper;
+    const spaceWallpaper = own ? (own.kind === 'default' ? null : this.find(own.kind, own.id)) : undefined;
     return {
       isPrivate: !!isPrivate,
       config: settings.get('newTab'),
-      current: isPrivate ? null : this.current(),
+      current: isPrivate ? null : spaceWallpaper !== undefined ? spaceWallpaper : this.current(),
+      space: space ? { id: space.id, name: space.name, icon: space.icon, color: space.color, ownWallpaper: !!own } : null,
+      atmosphere: settings.get('atmosphere'),
       gallery: GALLERY.map((g) => this.galleryItem(g)),
       uploads: this.store.data.uploads.map((u) => this.uploadItem(u)),
       maxUploads: MAX_UPLOADS

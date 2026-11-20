@@ -61,7 +61,14 @@ const BINDINGS = [
   ['Mod', '6', 'tab-6'],
   ['Mod', '7', 'tab-7'],
   ['Mod', '8', 'tab-8'],
-  ['Mod', '9', 'tab-last']
+  ['Mod', '9', 'tab-last'],
+  // 0.90
+  ['', 'F9', 'reader'],
+  ['Mod+Shift', 'f', 'focus-mode'],
+  ['Mod+Shift', 's', 'collect'],
+  ['Mod+Shift', 'e', 'toggle-sidebar'],
+  // Spaces by position: Ctrl+Shift+1 … 9 (matched on the physical key, so it works on any layout)
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ['Mod+Shift', `Digit${n}`, `space-${n}`])
 ];
 if (isMac) {
   BINDINGS.push(['Mod', '[', 'back'], ['Mod', ']', 'forward'], ['Mod', 'ArrowLeft', 'back'], ['Mod', 'ArrowRight', 'forward'], ['Mod', 'q', 'quit']);
@@ -80,14 +87,29 @@ function matches(input, mods, key) {
   if (!!input.alt !== want.has('Alt')) return false;
   // Shift is ignored for keys that need Shift to type (e.g. "+").
   if (key !== '+' && !!input.shift !== want.has('Shift')) return false;
+  // Physical keys (Digit1, Space…) are compared by code, so Shift+1 still matches on any layout.
+  if (/^(Digit\d|Space)$/.test(key)) return input.code === key;
   return normalizeKey(input.key) === normalizeKey(key);
+}
+
+// The Command Center key is a setting (Settings → General).
+const COMMAND_KEYS = {
+  'ctrl+space': ['Ctrl', 'Space'],
+  'ctrl+shift+space': ['Ctrl+Shift', 'Space'],
+  'ctrl+shift+k': ['Mod+Shift', 'k'],
+  off: null
+};
+let commandBinding = COMMAND_KEYS['ctrl+space'];
+function setCommandKey(id) {
+  commandBinding = Object.hasOwn(COMMAND_KEYS, id) ? COMMAND_KEYS[id] : COMMAND_KEYS['ctrl+space'];
 }
 
 /** Returns the action for a before-input-event `input`, or null. */
 function actionFor(input) {
   if (input.type !== 'keyDown') return null;
+  if (commandBinding && matches(input, commandBinding[0], commandBinding[1])) return 'command-center';
   for (const [mods, key, action] of BINDINGS) if (matches(input, mods, key)) return action;
   return null;
 }
 
-module.exports = { actionFor, BINDINGS };
+module.exports = { actionFor, BINDINGS, setCommandKey, COMMAND_KEYS };

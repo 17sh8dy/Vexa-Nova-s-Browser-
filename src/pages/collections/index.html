@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Collections</title>
+  <link rel="stylesheet" href="vexa://shared/theme.css" />
+  <link rel="stylesheet" href="vexa://shared/page.css" />
+  <link rel="stylesheet" href="collections.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="side" id="side"></aside>
+    <main class="main wide">
+      <!-- All collections -->
+      <section id="home-view">
+        <div class="page-head">
+          <h1>Collections</h1>
+          <label class="search"><span id="search-ico"></span><input id="q" type="text" placeholder="Search everything you've saved" spellcheck="false" /></label>
+        </div>
+        <div class="co-toolbar">
+          <button class="btn small primary" id="new-col">New collection</button>
+          <button class="btn small" id="import">Import…</button>
+          <button class="btn small" id="export-all">Export all…</button>
+          <span class="spacer"></span>
+          <div class="seg" id="sort"><button data-v="custom" class="on">Your order</button><button data-v="updated">Recently changed</button><button data-v="name">Name</button></div>
+        </div>
+        <div id="results" class="results" hidden></div>
+        <div id="fav-head" class="co-sub" hidden>Favorites</div>
+        <div id="fav-grid" class="co-grid"></div>
+        <div id="all-head" class="co-sub" hidden>All collections</div>
+        <div id="grid" class="co-grid"></div>
+        <div id="empty" class="co-empty" hidden>
+          <div class="ce-art"></div>
+          <h2>Your personal internet library</h2>
+          <p>Collect pages, articles, images, videos, notes, files and screenshots into collections. Save from the <b>collection button</b> in the address bar, the right-click menu, <b>Ctrl+Shift+S</b>, or drop things onto this page.</p>
+          <button class="btn primary" id="empty-new">Create your first collection</button>
+        </div>
+      </section>
+
+      <!-- One collection -->
+      <section id="col-view" hidden>
+        <button class="back-link" id="back"><span id="back-ico"></span>All collections</button>
+        <header class="col-hero" id="hero">
+          <div class="hero-cover" id="hero-cover"></div>
+          <div class="hero-text">
+            <input id="col-name" class="col-name" type="text" maxlength="80" aria-label="Collection name" spellcheck="false" />
+            <textarea id="col-desc" class="col-desc" rows="1" maxlength="1000" placeholder="Add a description…" aria-label="Description"></textarea>
+            <div class="hero-meta" id="hero-meta"></div>
+          </div>
+          <div class="hero-actions">
+            <button class="ibtn" id="col-fav" title="Favorite"></button>
+            <button class="ibtn" id="col-more" title="More"></button>
+          </div>
+        </header>
+        <div class="add-bar">
+          <form id="add-link" class="add-link" autocomplete="off"><span id="link-ico"></span><input id="link-url" type="text" placeholder="Paste a link to save it here…" spellcheck="false" /></form>
+          <button class="btn small" id="add-note">Add note</button>
+          <button class="btn small" id="add-files">Add files…</button>
+          <label class="search small"><span id="fsearch-ico"></span><input id="fq" type="text" placeholder="Filter" spellcheck="false" /></label>
+          <div class="seg" id="type-filter"><button data-v="" class="on">All</button><button data-v="link">Pages</button><button data-v="image">Images</button><button data-v="video">Videos</button><button data-v="note">Notes</button><button data-v="file">Files</button></div>
+        </div>
+        <div id="note-editor" class="note-editor card" hidden>
+          <textarea id="note-text" rows="4" placeholder="Write a note…"></textarea>
+          <div class="ne-actions"><button class="btn small" id="note-cancel">Cancel</button><button class="btn small primary" id="note-save">Save note</button></div>
+        </div>
+        <div id="items" class="items"></div>
+        <div id="items-empty" class="co-empty small" hidden><p>This collection is empty. Paste a link above, add a note, or drop files, images and links anywhere on this page.</p></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="drop-hint" class="drop-hint" hidden><div><span class="dh-icon"></span><span id="drop-text">Drop to add to this collection</span></div></div>
+
+  <script src="vexa://shared/icons.js"></script>
+  <script src="vexa://shared/palettes.js"></script>
+  <script src="vexa://shared/page.js"></script>
+  <script src="collections.js"></script>
+</body>
+</html>

@@ -81,6 +81,7 @@
     const items = [
       ['history', 'History', I.clock],
       ['bookmarks', 'Bookmarks', I.bookmark],
+      ['collections', 'Collections', I.collection || I.bookmark],
       ['downloads', 'Downloads', I.download.replace('width="18" height="18"', 'width="16" height="16"')],
       ['settings', 'Settings', I.settings]
     ];
@@ -94,4 +95,22 @@
     call('nav.open', url, disposition);
   }
   window.V = { call, esc, $, $$, fmtBytes, fmtTime, dayLabel, hostOf, favicon, toast, debounce, sidebar, openFromEvent, on: (n, f) => window.vexa.on(n, f) };
+
+  // Vexa Atmosphere: vexa:// pages take the window's palette and accent (private windows keep theirs).
+  if (window.VexaPalettes && window.vexa && !document.documentElement.classList.contains('private') && !document.documentElement.hasAttribute('data-own-theme')) {
+    const dark = matchMedia('(prefers-color-scheme: dark)');
+    let look = null;
+    const apply = () => look && window.VexaPalettes.apply(document, look, dark.matches);
+    const refresh = () =>
+      call('atmosphere.look')
+        .then((l) => {
+          look = l;
+          apply();
+        })
+        .catch(() => {});
+    refresh();
+    dark.addEventListener('change', apply);
+    window.vexa.on('atmosphere', refresh);
+    window.vexa.on('spaces', refresh);
+  }
 })();

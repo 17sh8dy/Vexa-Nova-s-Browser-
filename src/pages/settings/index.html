@@ -13,7 +13,7 @@
     <main class="main">
       <div class="page-head"><h1>Settings</h1></div>
       <nav class="jump" id="jump">
-        <a href="#general">General</a><a href="#appearance">Appearance</a><a href="#search">Search</a><a href="#shields">Shields</a><a href="#privacy">Privacy</a><a href="#passwords">Passwords &amp; autofill</a><a href="#sync">Sync</a><a href="#extensions">Extensions</a><a href="#permissions">Site permissions</a><a href="#downloads">Downloads</a><a href="#about">About</a>
+        <a href="#general">General</a><a href="#appearance">Appearance</a><a href="#spaces">Spaces</a><a href="#search">Search</a><a href="#focus">Focus</a><a href="#shields">Shields</a><a href="#privacy">Privacy</a><a href="#passwords">Passwords &amp; autofill</a><a href="#sync">Sync</a><a href="#extensions">Extensions</a><a href="#permissions">Site permissions</a><a href="#downloads">Downloads</a><a href="#compatibility">Compatibility</a><a href="#about">About</a>
       </nav>
 
       <section class="section" id="general">
@@ -43,6 +43,15 @@
             <div class="label"><b>Show home button</b></div>
             <label class="switch"><input type="checkbox" data-setting="showHomeButton" /><span></span></label>
           </div>
+          <div class="row">
+            <div class="label"><b>Command Center shortcut</b><small>One box for tabs, Spaces, bookmarks, history, actions and the web. Some web apps (code editors) use Ctrl+Space themselves — pick another key if one of yours does.</small></div>
+            <select data-setting="commandCenterKey">
+              <option value="ctrl+space">Ctrl+Space</option>
+              <option value="ctrl+shift+space">Ctrl+Shift+Space</option>
+              <option value="ctrl+shift+k">Ctrl+Shift+K</option>
+              <option value="off">Off (menu and sidebar only)</option>
+            </select>
+          </div>
         </div>
       </section>
 
@@ -58,10 +67,31 @@
             <label class="switch"><input type="checkbox" data-setting="showBookmarksBar" /><span></span></label>
           </div>
           <div class="row">
-            <div class="label"><b>New Tab page</b><small>Wallpaper, automatic changes, shortcuts and widgets</small></div>
-            <a class="btn small" href="vexa://newtab/#customise">Customise</a>
+            <div class="label"><b>Vexa Atmosphere</b><small id="atmo-summary">Presets, colors, motion, background effects and interface sounds</small></div>
+            <a class="btn small" href="vexa://newtab/#customize=atmosphere">Customize</a>
+          </div>
+          <div class="row">
+            <div class="label"><b>Interface sounds</b><small>Typing, clicks, tabs, page loads, notifications, startup and shutdown. They play in Vexa's own interface, never in web pages.</small></div>
+            <a class="btn small" href="vexa://newtab/#customize=sounds">Sounds…</a>
+          </div>
+          <div class="row">
+            <div class="label"><b>New Tab page</b><small>Wallpaper, layout and widgets</small></div>
+            <a class="btn small" href="vexa://newtab/#customize=layout">Customize</a>
+          </div>
+          <div class="row">
+            <div class="label"><b>Sidebar</b><small>Spaces, pinned sites, Collections and Focus at the side of the window (Ctrl+Shift+E). Right-click it for more options.</small></div>
+            <label class="switch"><input type="checkbox" id="sb-show" /><span></span></label>
           </div>
         </div>
+      </section>
+
+      <section class="section" id="spaces">
+        <h2>Spaces</h2>
+        <p class="section-lead">Each Space has its own tabs in every window, and can have its own look, wallpaper, pinned sites and startup pages. Switch with the sidebar, the Command Center or Ctrl+Shift+1…9. An <b>isolated</b> Space also keeps its own cookies, logins and site storage — use it to be signed in to two accounts at once. Ordinary Spaces share one browser profile: they organize tabs, they are not a privacy boundary.</p>
+        <div class="card" id="spaces-list"></div>
+        <div class="btn-row"><button class="btn small" id="space-new">New Space</button></div>
+        <h2 class="sub-h">Saved sessions</h2>
+        <div class="card" id="saved-list"></div>
       </section>
 
       <section class="section" id="search">
@@ -75,10 +105,44 @@
             <div class="label"><b>Vexa Search <span class="pill beta">BETA</span></b><small>Nova's own search engine, built from scratch. It runs entirely on this computer from an index built into Vexa, so your searches never leave your device. It's in beta: it knows about 11,000 pages so far, mostly mainstream technology, gaming, entertainment, education and news sites, and adult sites are not included. You can switch back to another engine here at any time.</small></div>
           </div>
           <div class="row">
-            <div class="label"><b>Address bar suggestions</b><small>Suggest pages from your history and bookmarks. Nothing you type is sent anywhere until you press Enter.</small></div>
+            <div class="label"><b>Address bar suggestions</b><small>Suggest pages from your history, bookmarks and collections. Nothing you type is sent anywhere until you press Enter.</small></div>
             <label class="switch"><input type="checkbox" data-setting="suggestions" /><span></span></label>
           </div>
+          <div class="row">
+            <div class="label"><b>Suggest searches from Vexa Search</b><small>Word completions from the Vexa Search index built into Vexa. Works offline; nothing leaves this computer.</small></div>
+            <label class="switch"><input type="checkbox" data-setting="vexaSuggestions" /><span></span></label>
+          </div>
+          <div class="row">
+            <div class="label"><b>Suggest open tabs</b><small>“Switch to tab” when what you type matches a tab in any window or Space</small></div>
+            <label class="switch"><input type="checkbox" data-setting="tabSuggestions" /><span></span></label>
+          </div>
+          <div class="row">
+            <div class="label"><b>Remember searches</b><small>Your recent searches show up as suggestions. Kept on this device only (never synced, never in private windows) and cleared with your browsing history.</small></div>
+            <label class="switch"><input type="checkbox" data-setting="searchHistory" /><span></span></label>
+          </div>
         </div>
+        <h2 class="sub-h">Search shortcuts</h2>
+        <p class="hint">Type a keyword in the address bar to search one site: <code>@yt lo-fi</code>. Built in: <code>@tabs</code>, <code>@bookmarks</code>, <code>@history</code>, <code>@collections</code> and <code>@spaces</code> look through what's on this computer. In a search address, <code>%s</code> stands for what you type.</p>
+        <div class="card" id="shortcuts-list"></div>
+        <div class="btn-row"><button class="btn small" id="sc-add">Add shortcut</button><button class="btn small" id="sc-reset">Restore defaults</button></div>
+        <h2 class="sub-h">Recent searches</h2>
+        <div class="card" id="search-history"></div>
+      </section>
+
+      <section class="section" id="focus">
+        <h2>Focus &amp; Reader</h2>
+        <p class="section-lead">Focus sessions give one task its own Space, a timer and fewer distractions (start one from the sidebar, the menu or the Command Center: “focus on essay for 25 min”). The minimal interface (Ctrl+Shift+F) hides tabs, sidebar and bookmarks. Reader view (F9) shows just the article.</p>
+        <div class="card">
+          <div class="row"><div class="label"><b>Default session length</b></div><select id="focus-minutes"><option value="15">15 minutes</option><option value="25">25 minutes</option><option value="50">50 minutes</option><option value="90">90 minutes</option></select></div>
+          <div class="row"><div class="label"><b>Hold back distracting sites</b><small>Sites on the list below show a “Stay focused” page during a session, with a button to allow one for 5 minutes</small></div><label class="switch"><input type="checkbox" data-focus="blockDistractions" /><span></span></label></div>
+          <div class="row"><div class="label"><b>Minimal interface during sessions</b></div><label class="switch"><input type="checkbox" data-focus="minimalUi" /><span></span></label></div>
+          <div class="row"><div class="label"><b>Mute other tabs</b><small>Tabs playing sound outside the session are muted until it ends</small></div><label class="switch"><input type="checkbox" data-focus="muteOtherTabs" /><span></span></label></div>
+          <div class="row"><div class="label"><b>Quiet interface sounds</b><small>Atmosphere sounds stay silent while a session runs</small></div><label class="switch"><input type="checkbox" data-focus="quietSounds" /><span></span></label></div>
+        </div>
+        <h2 class="sub-h">Distracting sites</h2>
+        <div class="card"><div class="row col"><div class="label"><small>One site per line (for example <code>youtube.com</code>). Subdomains are included.</small></div><textarea id="focus-blocklist" rows="6" spellcheck="false"></textarea></div></div>
+        <h2 class="sub-h">Site preferences</h2>
+        <div class="card" id="focus-sites"></div>
       </section>
 
       <section class="section" id="shields">
@@ -203,6 +267,24 @@
         </div>
       </section>
 
+      <section class="section" id="compatibility">
+        <h2>Compatibility</h2>
+        <p class="section-lead">How Vexa works with sites that are strict about which browser you use. The full explanation is in <code>docs/COMPATIBILITY.md</code>.</p>
+        <h2 class="sub-h">Google sign-in</h2>
+        <div class="card">
+          <div class="row">
+            <div class="label"><b>Present the Chrome brand to Google</b><small>Google's sign-in refuses browsers it can't recognise and has no way to register a new one. With this on, Vexa adds “Google Chrome” to the browser brands it reports (Client Hints) on Google's own sites only. Vexa is built on Chromium, the open-source engine of Chrome, but it is not Chrome, so this is a compatibility claim, not the full truth. Other sites always see the honest Chromium brands. Turn it off to never claim the Chrome brand; Google sign-in may then be refused.</small></div>
+            <label class="switch"><input type="checkbox" data-setting="googleCompat" /><span></span></label>
+          </div>
+          <div class="row">
+            <div class="label"><b>“Sign in with Google” buttons on other sites</b><small>Those buttons run in a frame from accounts.google.com that needs your Google cookies. Vexa Shields blocks cross-site cookies, so it lets these through for that one sign-in address only. Turn off to block them too (the buttons then stop working).</small></div>
+            <label class="switch"><input type="checkbox" data-setting="googleSignInButtons" /><span></span></label>
+          </div>
+        </div>
+        <h2 class="sub-h">Protected video (DRM)</h2>
+        <div class="card"><div class="row"><div class="label"><b>Widevine</b><small id="compat-drm">Checking…</small></div></div></div>
+      </section>
+
       <section class="section" id="about">
         <h2>About Vexa</h2>
         <div class="card about">
@@ -219,6 +301,7 @@
     </main>
   </div>
   <script src="vexa://shared/icons.js"></script>
+  <script src="vexa://shared/palettes.js"></script>
   <script src="vexa://shared/page.js"></script>
   <script src="settings.js"></script>
 </body>
