@@ -1,4 +1,4 @@
-# Vexa Download Website — 0.5.5
+# Vexa Download Website — 0.90.0
 
 A standalone, responsive product/download website for Vexa, Nova's Chromium-powered desktop browser.
 
@@ -31,8 +31,8 @@ The `_headers` file provides baseline response security headers for Cloudflare P
 
 ## Downloads
 
-The download links point at the GitHub Release `v0.5.5` on github.com/17sh8dy/Vexa-Nova-s-Browser-
-(`Vexa-Setup-0.5.5.exe`, 174 MB, and `Vexa-Portable-0.5.5.exe`, 162 MB; 0.5.5 bundles the Vexa Search index). The installers are well over 100 MB, which is over
+The download links point at the GitHub Release `v0.90.0` on github.com/17sh8dy/Vexa-Nova-s-Browser-
+(`Vexa-Setup-0.90.0.exe`, 175 MB, and `Vexa-Portable-0.90.0.exe`, 163 MB; they bundle the Vexa Search index). The installers are well over 100 MB, which is over
 Cloudflare Workers' 25 MiB static-asset limit, so they are not hosted on the site itself. For a new
 version, publish a new release and update the URLs, sizes and version numbers in `index.html`.
 
