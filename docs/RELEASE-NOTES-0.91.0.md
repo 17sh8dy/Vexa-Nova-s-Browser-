@@ -23,7 +23,7 @@ itself was making the browser look tampered with. 0.91 fixes those parts:
 * **Sign-in popups show where they are:** the window title starts with the real host, e.g.
   "accounts.google.com — Sign in".
 
-**Google still refuses the sign-in.** Tested by hand on 0.91 (November 27, 2026): Google shows
+**Google still refuses the sign-in**, with the Chrome-brand switch on and off. Tested by hand on 0.91 (November 27, 2026): Google shows
 *"Couldn't sign you in — This browser or app may not be secure."* The fixes above make Vexa
 consistent and honest, but they are not enough for Google, which can refuse browsers it doesn't
 recognise for reasons Electron can't honestly change (for example, `window.chrome` is empty).
@@ -33,7 +33,7 @@ recognise for reasons Electron can't honestly change (for example, `window.chrom
 | Date | Account type | Chrome brand | Result |
 |---|---|---|---|
 | 2026-11-27 | tester's own accounts | on (default) | Refused: "This browser or app may not be secure" |
-| | | off | *not yet tested* |
+| 2026-11-27 | tester's own accounts | off | Refused: "This browser or app may not be secure" |
 
 ## Settings
 
