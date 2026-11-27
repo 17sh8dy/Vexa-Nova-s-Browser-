@@ -9,11 +9,13 @@ Nothing here bypasses a security check, a content-protection system, or a site's
 
 ## 1. Google sign-in
 
-> **Status (0.91): not verified.** A tester using several real Google accounts on Vexa 0.90 got
-> *"Couldn't sign you in — This browser or app may not be secure"* every time. 0.91 removes the
-> things Vexa itself was doing that make a browser look tampered with (below), but nobody has yet
-> signed in to a real Google account on 0.91. Until that has been done by hand
-> ([checklist](GOOGLE-SIGNIN-TESTING.md)), treat Google sign-in in Vexa as **unsupported**.
+> **Status (0.91): Google refuses the sign-in — a known limitation.** On 0.90 and again on 0.91
+> (tested by hand, November 27, 2026), Google answers *"Couldn't sign you in — This browser or app
+> may not be secure"*. 0.91 removed everything Vexa itself did that made it look tampered with
+> (below); what remains is Google declining a browser it doesn't recognise, which Vexa can't
+> honestly change. Google sign-in in Vexa is **unsupported**. Results are logged in
+> [RELEASE-NOTES-0.91.0.md](RELEASE-NOTES-0.91.0.md); the [checklist](GOOGLE-SIGNIN-TESTING.md)
+> is for re-testing after an Electron or Vexa update.
 
 ### What Google says
 
@@ -164,8 +166,10 @@ project rules out. A handoff would leave you signed in to the wrong browser, so 
   wrapped canvas / WebGL / audio functions on the sign-in page in both modes. The probe ran through
   the e2e-style remote-debugging connection, so it says nothing about whether Google *accepts* the
   sign-in — only what Vexa now presents.
-* **Not verified: a real sign-in.** That needs a real account and password, which automated tests
-  never enter. Follow [GOOGLE-SIGNIN-TESTING.md](GOOGLE-SIGNIN-TESTING.md) and record the result.
+* **Real sign-in, by hand (November 27, 2026, 0.91, Chrome brand on): refused** with *"This
+  browser or app may not be secure"*. How the password was entered (typed, or pasted from a
+  password manager) doesn't matter for this message — it is about the browser, not the input.
+  Re-test with [GOOGLE-SIGNIN-TESTING.md](GOOGLE-SIGNIN-TESTING.md) after Electron upgrades.
 
 ---
 

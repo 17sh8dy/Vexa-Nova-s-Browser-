@@ -23,16 +23,17 @@ itself was making the browser look tampered with. 0.91 fixes those parts:
 * **Sign-in popups show where they are:** the window title starts with the real host, e.g.
   "accounts.google.com — Sign in".
 
-**Not verified:** a real Google sign-in on 0.91 has not been tried yet. Google decides which
-browsers it accepts and may still refuse Vexa because of things Electron can't honestly change
-(for example, `window.chrome` is empty). Please test with
-[GOOGLE-SIGNIN-TESTING.md](GOOGLE-SIGNIN-TESTING.md), in both settings of the Chrome-brand switch,
-and record the result here.
+**Google still refuses the sign-in.** Tested by hand on 0.91 (November 27, 2026): Google shows
+*"Couldn't sign you in — This browser or app may not be secure."* The fixes above make Vexa
+consistent and honest, but they are not enough for Google, which can refuse browsers it doesn't
+recognise for reasons Electron can't honestly change (for example, `window.chrome` is empty).
+**Google sign-in is a known limitation of Vexa** — see
+[COMPATIBILITY.md](COMPATIBILITY.md#if-google-still-refuses-vexa) for what still works.
 
-| Date | Tester | Account type | Chrome brand | Result |
-|---|---|---|---|---|
-| | | | on | *not yet tested* |
-| | | | off | *not yet tested* |
+| Date | Account type | Chrome brand | Result |
+|---|---|---|---|
+| 2026-11-27 | tester's own accounts | on (default) | Refused: "This browser or app may not be secure" |
+| | | off | *not yet tested* |
 
 ## Settings
 
@@ -46,10 +47,9 @@ label instead of squeezing it.
 ## New Tab
 
 * The search box is bigger and leads the page; the logo is smaller.
-* **Explore chips** under the search box put a keyword shortcut (`@yt`, `@w`, `@nova`, `@gh` — only
-  those you still have in Settings → Search) into the box with one click, or open the Command Center
-  (`@tabs` and the Command Center key shown are your real ones). They used to be a hint that only
-  appeared on hover.
+* Two chips under the search box: **@tabs** (find an open tab) and **Command Center** (showing your
+  real shortcut key). No site shortcuts are suggested — where to go is up to you. These replace a
+  hint that only appeared on hover.
 * The **Spaces** and **Collections** boxes are no longer shown by default — both are always in the
   sidebar, and Collections is in the page footer. They're still available under Customize → Layout.
 * **Your layout is kept.** Profiles whose widgets were still exactly the 0.90 defaults get the new

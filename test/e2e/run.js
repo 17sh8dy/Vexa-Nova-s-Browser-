@@ -703,10 +703,7 @@ async function main() {
     // 0.91: exploring first — no Spaces / Collections boxes by default (both live in the sidebar).
     assert(await ntp.eval(`document.querySelector('[data-widget=spaces]').hidden && document.querySelector('[data-widget=collections]').hidden`), 'Spaces and Collections boxes off by default');
     const chips = await waitFor(() => ntp.eval(`[...document.querySelectorAll('#search-hints .xchip')].map((b) => b.textContent).join('|')`), { label: 'explore chips' });
-    assert(/@yt/.test(chips) && /Command Center/.test(chips), 'explore chips: ' + chips);
-    await ntp.eval(`document.querySelector('#search-hints [data-kw=yt]').click()`);
-    assert((await ntp.eval(`document.querySelector('#q').value`)) === '@yt ', 'a chip puts its keyword in the search box');
-    await ntp.eval(`document.querySelector('#q').value = ''`);
+    assert(/^@tabs\s*Your tabs\|Command Center/.test(chips) && chips.split('|').length === 2, 'only @tabs and Command Center, no site shortcuts: ' + chips);
     await ntp.eval(`vexa.call('wallpaper.choose', 'gallery', 'dusk')`);
     await waitFor(() => ntp.eval(`document.body.classList.contains('has-wallpaper') && document.querySelector('.bg-img').style.backgroundImage.includes('dusk.svg')`), { label: 'dusk shown live' });
     assert(await ntp.eval(`document.body.classList.contains('wp-dark')`), 'dark wallpaper → light text');
