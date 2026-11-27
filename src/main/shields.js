@@ -8,7 +8,7 @@ const { EventEmitter } = require('events');
 const { app } = require('electron');
 const { settings } = require('./settings');
 const { JsonStore } = require('./store');
-const { siteOf, hostOf } = require('./url');
+const { siteOf, hostOf, isGoogleAccountsHost } = require('./url');
 const rules = require('./shields-rules');
 
 const { PROTECTIONS } = rules;
@@ -254,9 +254,15 @@ class Shields extends EventEmitter {
   /** Config for the page preload: whether to protect, and a per-session, per-site seed. */
   pageConfig(ses, url) {
     if (!/^https?:/i.test(url)) return { fingerprinting: false };
-    const site = siteOf(hostOf(url));
+    const host = hostOf(url);
+    const site = siteOf(host);
     const p = this.forSite(site, ses);
     if (!p.fingerprinting) return { fingerprinting: false };
+    // Google's sign-in pages check that canvas / graphics / audio readings are genuine and
+    // refuse the sign-in ("This browser or app may not be secure") when they look altered.
+    // They're left untouched there, unless the user turned fingerprinting protection on for
+    // that site explicitly from the Shields panel. See docs/COMPATIBILITY.md.
+    if (isGoogleAccountsHost(host) && this.siteOverrides(site, ses).fingerprinting !== true) return { fingerprinting: false, exempt: 'google-sign-in' };
     const seed = crypto.createHmac('sha256', this.state(ses).key).update(site).digest().readUInt32LE(0);
     return { fingerprinting: true, seed };
   }

@@ -54,14 +54,116 @@ function isGoogleSignInUrl(url) {
   }
 }
 
-/** Client Hints brand headers for the Chrome compatibility mode. */
-function googleBrandHeaders(chromeVersion) {
-  const full = String(chromeVersion || '130.0.0.0');
-  const major = full.split('.')[0];
-  return {
-    'sec-ch-ua': `"Chromium";v="${major}", "Google Chrome";v="${major}", "Not.A/Brand";v="99"`,
-    'sec-ch-ua-full-version-list': `"Chromium";v="${full}", "Google Chrome";v="${full}", "Not.A/Brand";v="99.0.0.0"`
-  };
+/**
+ * Google's account / sign-in hosts (accounts.google.com, regional accounts.google.co.uk…,
+ * accounts.youtube.com). Google's anti-abuse checks run here, so Vexa leaves the page's
+ * environment untouched on these hosts (no fingerprinting noise). See docs/COMPATIBILITY.md.
+ */
+const GOOGLE_ACCOUNTS_HOST = /^accounts\.(google\.(?:[a-z]{2,3}|co\.[a-z]{2}|com\.[a-z]{2})|youtube\.com)$/i;
+function isGoogleAccountsHost(host) {
+  return GOOGLE_ACCOUNTS_HOST.test(String(host || ''));
+}
+
+/**
+ * Chrome compatibility mode: add the "Google Chrome" brand to a brand list that Chromium
+ * itself produced, right after "Chromium" and with Chromium's own version. Chromium's GREASE
+ * entry (e.g. "Not:A-Brand";v="8") and order are kept exactly, so the result is always
+ * Chromium's real list plus one entry — never a hand-written list no browser sends.
+ * Works for `navigator.userAgentData.brands` / `fullVersionList` shaped arrays.
+ */
+function withChromeBrand(list) {
+  if (!Array.isArray(list)) return list;
+  if (list.some((b) => b && b.brand === 'Google Chrome')) return list;
+  const i = list.findIndex((b) => b && b.brand === 'Chromium');
+  if (i < 0) return list;
+  const out = list.map((b) => ({ brand: b.brand, version: b.version }));
+  out.splice(i + 1, 0, { brand: 'Google Chrome', version: list[i].version });
+  return out;
+}
+
+/**
+ * Chromium's own brand list for a version, the same one `navigator.userAgentData.brands`
+ * reports: Chromium plus a "GREASE" brand that varies by major version (Chromium's
+ * GenerateBrandVersionList in components/embedder_support/user_agent_utils.cc).
+ * For Chromium 156: [{ "Not:A-Brand", "8" }, { "Chromium", "156" }]. `full` = full versions,
+ * as in `fullVersionList`.
+ */
+const GREASEY_CHARS = [' ', '(', ':', '-', '.', '/', ')', ';', '=', '?', '_'];
+const GREASED_VERSIONS = ['8', '99', '24'];
+function chromiumBrands(chromeVersion, { full = false } = {}) {
+  const fullVersion = String(chromeVersion || '');
+  const major = parseInt(fullVersion, 10);
+  if (!Number.isFinite(major) || major <= 0) return [];
+  const n = GREASEY_CHARS.length;
+  const grease = { brand: `Not${GREASEY_CHARS[major % n]}A${GREASEY_CHARS[(major + 1) % n]}Brand`, version: GREASED_VERSIONS[major % GREASED_VERSIONS.length] };
+  const chromium = { brand: 'Chromium', version: full ? fullVersion : String(major) };
+  if (full) grease.version += '.0.0.0';
+  return major % 2 === 0 ? [grease, chromium] : [chromium, grease];
+}
+
+/** Serialize a brand list as a Sec-CH-UA structured header. */
+function brandHeader(list) {
+  return list.map((b) => `"${b.brand}";v="${b.version}"`).join(', ');
+}
+
+/**
+ * The three low-entropy User-Agent Client Hints every Chromium browser sends to secure
+ * origins by default. Electron 45 doesn't send them at all (checked against a local server
+ * and a live HTTPS site), although its JavaScript reports the same values — a mismatch real
+ * browsers never have. Vexa adds Chromium's own, honest values.
+ */
+const CH_PLATFORMS = { win32: 'Windows', darwin: 'macOS', linux: 'Linux', freebsd: 'FreeBSD', openbsd: 'OpenBSD' };
+function lowEntropyClientHints(chromeVersion, platform) {
+  const brands = chromiumBrands(chromeVersion);
+  if (!brands.length) return {};
+  return { 'sec-ch-ua': brandHeader(brands), 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': `"${CH_PLATFORMS[platform] || 'Unknown'}"` };
+}
+
+/** Requests that get client hints: secure origins (https/wss, and localhost, as in Chromium). */
+function sendsClientHints(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'https:' || u.protocol === 'wss:') return true;
+    return (u.protocol === 'http:' || u.protocol === 'ws:') && (u.hostname === 'localhost' || u.hostname.endsWith('.localhost') || u.hostname === '127.0.0.1' || u.hostname === '[::1]');
+  } catch {
+    return false;
+  }
+}
+
+/** Parse a Sec-CH-UA style header (`"A";v="1", "B";v="2"`) into [{ brand, version }], or null. */
+function parseBrandHeader(value) {
+  const out = [];
+  const re = /\s*"((?:[^"\\]|\\.)*)"\s*;\s*v\s*=\s*"((?:[^"\\]|\\.)*)"\s*(?:,|$)/y;
+  const s = String(value || '');
+  let m;
+  while (re.lastIndex < s.length && (m = re.exec(s))) out.push({ brand: m[1], version: m[2] });
+  return out.length && re.lastIndex >= s.trimEnd().length ? out : null;
+}
+
+/**
+ * The same for a Sec-CH-UA / Sec-CH-UA-Full-Version-List header value that Chromium sent.
+ * Returns the value unchanged when it can't be parsed or has no "Chromium" entry.
+ */
+function withChromeBrandHeader(value) {
+  const list = parseBrandHeader(value);
+  if (!list) return value;
+  const next = withChromeBrand(list);
+  if (next === list) return value;
+  return brandHeader(next);
+}
+
+/** Title for a popup window: the page's host first (it can't be faked by the page), then its title. */
+function popupTitle(url, title) {
+  let host = '';
+  try {
+    const u = new URL(url);
+    host = /^https?:$/.test(u.protocol) ? u.host : '';
+  } catch {
+    /* about:blank and the like */
+  }
+  const t = String(title || '').trim();
+  if (!host) return t || 'Vexa';
+  return t && t !== url && t !== host ? `${host} — ${t}` : host;
 }
 
 /** Fill a "%s" search template. */
@@ -215,7 +317,15 @@ module.exports = {
   SCOPES,
   isGoogleHost,
   isGoogleSignInUrl,
-  googleBrandHeaders,
+  isGoogleAccountsHost,
+  withChromeBrand,
+  withChromeBrandHeader,
+  parseBrandHeader,
+  chromiumBrands,
+  brandHeader,
+  lowEntropyClientHints,
+  sendsClientHints,
+  popupTitle,
   parseKeyword,
   fillTemplate,
   resolveInput,

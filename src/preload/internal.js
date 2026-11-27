@@ -42,27 +42,15 @@ if (location.protocol === 'vexa:' && location.hostname !== 'search') {
   }
 
   // ------------------------------------------------------------------ Google sign-in (compatibility mode)
-  // Optional (Settings → Compatibility, see docs/COMPATIBILITY.md): the Client Hints headers
-  // carry the Chrome brand on Google's hosts; this makes navigator.userAgentData agree with
-  // them there. Off = Vexa reports the honest Chromium brand list everywhere.
-  if (pageCfg && pageCfg.googleCompat && /(^|\.)(google\.[a-z.]+|youtube\.com)$/i.test(location.hostname)) {
+  // Optional (Settings → Compatibility, see docs/COMPATIBILITY.md): on Google's hosts the
+  // Client Hints headers get the "Google Chrome" brand added to Chromium's own list; this makes
+  // navigator.userAgentData agree with them. The main process decides per frame (pageCfg), with
+  // the same host list as the headers. Chromium's GREASE brand and order are kept as they are.
+  // Off = Vexa reports Chromium's honest brand list everywhere.
+  if (pageCfg && pageCfg.googleCompat) {
     try {
-      webFrame.executeJavaScript(`(() => {
-        const nav = navigator;
-        if (!nav.userAgentData) return;
-        const major = (/Chrome\\/(\\d+)/.exec(nav.userAgent) || [])[1] || '130';
-        const brands = [{ brand: 'Chromium', version: major }, { brand: 'Google Chrome', version: major }, { brand: 'Not.A/Brand', version: '99' }];
-        const proto = Object.getPrototypeOf(nav.userAgentData);
-        const origHigh = proto.getHighEntropyValues;
-        Object.defineProperty(proto, 'brands', { get: () => brands, configurable: true });
-        proto.getHighEntropyValues = function (hints) {
-          return origHigh.call(this, hints).then((v) => {
-            if (v.brands) v.brands = brands;
-            if (v.fullVersionList) v.fullVersionList = brands.map((b) => ({ brand: b.brand, version: b.version + '.0.0.0' }));
-            return v;
-          });
-        };
-      })()`);
+      if (typeof contextBridge.executeInMainWorld === 'function') contextBridge.executeInMainWorld({ func: addChromeBrand });
+      else webFrame.executeJavaScript(`(${addChromeBrand})()`);
     } catch {
       /* best effort */
     }
@@ -272,6 +260,34 @@ if (location.protocol === 'vexa:' && location.hostname !== 'search') {
 //   - Web Audio sample reads: inaudible noise (about 1e-7)
 //   - navigator.hardwareConcurrency: a plausible value between 2 and the real count
 // Not covered: fonts, workers, cross-origin frames (they get their own pass when loaded).
+
+// Runs in the page's main world (Google's hosts only, compatibility mode on). Mirrors
+// withChromeBrand() in src/main/url.js: Chromium's list plus "Google Chrome" after "Chromium".
+function addChromeBrand() {
+  const nav = navigator;
+  if (!nav.userAgentData) return;
+  const proto = Object.getPrototypeOf(nav.userAgentData);
+  const brandsDesc = Object.getOwnPropertyDescriptor(proto, 'brands');
+  const origHigh = proto.getHighEntropyValues;
+  if (!brandsDesc || !brandsDesc.get || typeof origHigh !== 'function') return;
+  const add = (list) => {
+    if (!Array.isArray(list) || list.some((b) => b.brand === 'Google Chrome')) return list;
+    const i = list.findIndex((b) => b.brand === 'Chromium');
+    if (i < 0) return list;
+    const out = list.map((b) => Object.freeze({ brand: b.brand, version: b.version }));
+    out.splice(i + 1, 0, Object.freeze({ brand: 'Google Chrome', version: list[i].version }));
+    return Object.freeze(out);
+  };
+  const brands = add(brandsDesc.get.call(nav.userAgentData));
+  Object.defineProperty(proto, 'brands', { ...brandsDesc, get() { return brands; } });
+  proto.getHighEntropyValues = function getHighEntropyValues(hints) {
+    return origHigh.call(this, hints).then((v) => {
+      if (v.brands) v.brands = add(v.brands);
+      if (v.fullVersionList) v.fullVersionList = add(v.fullVersionList);
+      return v;
+    });
+  };
+}
 
 function protect(seed, report) {
   const rnd = (n) => {

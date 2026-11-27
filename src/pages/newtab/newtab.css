@@ -18,21 +18,21 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
     radial-gradient(1.5px 1.5px at 20% 86%, var(--accent), transparent),
     radial-gradient(1px 1px at 52% 8%, var(--text-faint), transparent);
 }
-.ntp { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; padding: 11vh 24px 40px; }
-.hero { display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; animation: rise 500ms var(--ease); }
+.ntp { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; padding: 13vh 24px 40px; }
+.hero { display: flex; flex-direction: column; align-items: center; margin-bottom: 26px; animation: rise 500ms var(--ease); }
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
-.logo { width: 68px; height: 68px; filter: drop-shadow(0 10px 30px color-mix(in srgb, var(--accent) 45%, transparent)); }
+.logo { width: 56px; height: 56px; filter: drop-shadow(0 10px 30px color-mix(in srgb, var(--accent) 45%, transparent)); }
 .wordmark {
   margin-top: 10px;
-  font-family: var(--font-display); font-size: 40px; font-weight: 700; letter-spacing: -1px;
+  font-family: var(--font-display); font-size: 34px; font-weight: 700; letter-spacing: -1px;
   background: linear-gradient(120deg, var(--text) 30%, var(--accent-2));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .greeting { margin-top: 2px; color: var(--text-dim); font-size: 14px; min-height: 20px; }
 
 .ntp-search {
-  width: min(640px, 100%);
-  height: 54px;
+  width: min(680px, 100%);
+  height: 60px;
   display: flex; align-items: center; gap: 12px;
   padding: 0 16px 0 18px;
   border-radius: 18px;
@@ -43,8 +43,8 @@ body { display: flex; flex-direction: column; min-height: 100vh; }
 }
 .ntp-search:focus-within { box-shadow: 0 0 0 4px var(--accent-soft), inset 0 0 0 1.5px var(--accent), var(--shadow-pop); }
 .ntp-search-icon { color: var(--text-dim); display: grid; place-items: center; }
-.ntp-search-icon svg { width: 20px; height: 20px; }
-#q { flex: 1; min-width: 0; border: 0; outline: none; background: none; font: inherit; font-size: 16px; color: var(--text); height: 100%; }
+.ntp-search-icon svg { width: 21px; height: 21px; }
+#q { flex: 1; min-width: 0; border: 0; outline: none; background: none; font: inherit; font-size: 17px; color: var(--text); height: 100%; }
 #q::placeholder { color: var(--text-faint); }
 .ntp-kbd { font-size: 11px; color: var(--text-faint); border: 1px solid var(--border-strong); border-radius: 6px; padding: 2px 6px; opacity: 0; transition: opacity 150ms; }
 .ntp-search:focus-within .ntp-kbd { opacity: 1; }
@@ -245,15 +245,26 @@ body.with-clock .greeting { margin-top: 6px; }
 
 /* ================================================================== 0.90: widgets */
 .widgets { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 26px; }
-.w { width: min(640px, 100%); display: flex; flex-direction: column; align-items: center; animation: rise 500ms 80ms var(--ease) both; }
+.w { width: min(680px, 100%); display: flex; flex-direction: column; align-items: center; animation: rise 500ms 80ms var(--ease) both; }
 .w .tiles { margin-top: 0; }
 .w-search { margin-bottom: 4px; }
 .w-shortcuts .tiles { margin-top: 10px; }
 .w-title { align-self: stretch; display: flex; justify-content: space-between; margin: 0 4px 10px; font-size: 11px; font-weight: 750; letter-spacing: .9px; text-transform: uppercase; color: var(--text-faint); text-shadow: var(--shade, none); }
 .w-more { text-transform: none; letter-spacing: 0; font-weight: 600; }
-.search-hints { margin-top: 10px; font-size: 12px; color: var(--text-faint); text-shadow: var(--shade, none); opacity: 0; transition: opacity 200ms; }
-.w-search:focus-within .search-hints, .w-search:hover .search-hints { opacity: 1; }
-.search-hints kbd { font-size: 11px; padding: 0 5px; border-radius: 5px; border: 1px solid var(--glass-line, var(--border-strong)); color: var(--text-dim); }
+/* 0.91: "explore" chips under the search box — one click puts a keyword shortcut in the box. */
+.search-hints { margin-top: 14px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 8px; max-width: 100%; }
+.xchip {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border: 0; border-radius: 15px; font: inherit; font-size: 12.5px; font-weight: 550; color: var(--text-dim);
+  background: var(--glass, color-mix(in srgb, var(--raised) 70%, transparent));
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1px var(--glass-line, var(--border));
+  transition: background-color 140ms, color 140ms, transform 140ms var(--ease);
+}
+.xchip:hover { color: var(--text); background: var(--glass-hover, var(--surface-hover)); transform: translateY(-1px); }
+.xchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.xchip code { font: 600 11.5px ui-monospace, "Cascadia Code", Consolas, monospace; color: var(--accent-text); }
+.xchip kbd { font-size: 10.5px; padding: 0 5px; border-radius: 5px; border: 1px solid var(--glass-line, var(--border-strong)); color: var(--text-faint); }
 .glass-card { padding: 14px 16px; border-radius: 18px; align-items: stretch; background: var(--glass, color-mix(in srgb, var(--raised) 80%, transparent)); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: inset 0 0 0 1px var(--glass-line, var(--border)); }
 .tile-add { border: 0; background: none; font: inherit; cursor: pointer; }
 .tile-add .tile-icon { color: var(--text-dim); }
@@ -288,7 +299,7 @@ body.with-clock .greeting { margin-top: 6px; }
 body.layout-dashboard .ntp { padding-top: 7vh; }
 body.layout-dashboard .widgets { display: grid; grid-template-columns: repeat(2, minmax(0, 470px)); justify-content: center; align-items: start; gap: 18px; }
 body.layout-dashboard .w { width: 100%; }
-body.layout-dashboard .w-search { grid-column: 1 / -1; justify-self: center; width: min(640px, 100%); }
+body.layout-dashboard .w-search { grid-column: 1 / -1; justify-self: center; width: min(680px, 100%); }
 body.layout-dashboard .w-favorites, body.layout-dashboard .w-shortcuts { padding: 14px 10px; border-radius: 18px; background: var(--glass, color-mix(in srgb, var(--raised) 70%, transparent)); box-shadow: inset 0 0 0 1px var(--glass-line, var(--border)); }
 body.layout-dashboard .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
 @media (max-width: 900px) { body.layout-dashboard .widgets { grid-template-columns: 1fr; } }
@@ -361,3 +372,14 @@ body[data-effect^="static-"] .ntp-fx { animation: none; }
 }
 .drop-hint > div { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-radius: 14px; background: var(--raised); box-shadow: var(--shadow-pop); font-size: 15px; font-weight: 600; }
 .dh-icon { color: var(--accent-text); display: grid; place-items: center; }
+
+/* 0.91: small windows — keep the search box and tiles inside the page, no sideways scroll. */
+@media (max-width: 520px) {
+  .ntp { padding: 8vh 16px 32px; }
+  .ntp-search { height: 54px; padding: 0 12px 0 14px; }
+  .ntp-kbd { display: none; }
+  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .w-shortcuts, .w-favorites { width: 100%; }
+  .ntp-foot { flex-wrap: wrap; row-gap: 4px; padding-bottom: 66px; } /* clear of the Customize button */
+}
+@media (max-height: 620px) { .ntp { padding-top: 5vh; } .hero { margin-bottom: 16px; } .logo { width: 44px; height: 44px; } }

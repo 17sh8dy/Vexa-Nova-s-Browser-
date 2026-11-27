@@ -62,9 +62,8 @@ test('Google compatibility helpers are narrow', () => {
   assert.ok(!url.isGoogleSignInUrl('http://accounts.google.com/gsi/button'), 'https only');
   assert.ok(!url.isGoogleSignInUrl('https://accounts.google.com/ServiceLogin'), 'not the sign-in page itself');
   assert.ok(!url.isGoogleSignInUrl('https://www.google-analytics.com/gsi/x'), 'other Google hosts are not exempt');
-  const h = url.googleBrandHeaders('156.0.7000.12');
-  assert.match(h['sec-ch-ua'], /"Google Chrome";v="156"/);
-  assert.match(h['sec-ch-ua-full-version-list'], /156\.0\.7000\.12/);
+  // 0.91: the Chrome brand is added to Chromium's own header (see vexa091.test.js).
+  assert.match(url.withChromeBrandHeader('"Not:A-Brand";v="8", "Chromium";v="156"'), /"Google Chrome";v="156"/);
 });
 
 test('Atmosphere palettes resolve to CSS variables', () => {

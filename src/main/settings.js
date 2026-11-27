@@ -71,8 +71,8 @@ const DEFAULTS = {
     order: [...NEWTAB_WIDGETS],
     favorites: true,
     recent: false,
-    collections: true,
-    spaces: true,
+    collections: false, // 0.91: in the sidebar instead (still available as a widget)
+    spaces: false, // 0.91: in the sidebar instead (still available as a widget)
     weather: false, // opt-in: fetches from open-meteo.com
     favoritesList: [], // [{ title, url }]
     weatherCity: null, // { name, lat, lon }
@@ -325,8 +325,17 @@ class Settings extends EventEmitter {
     // Profiles from before Vexa Shields: carry the old third-party-cookie choice over.
     this.store.data.shields = { ...DEFAULTS.shields, ...(isObj(this.store.data.shields) ? this.store.data.shields : {}) };
     if (!this._fileHad('shields')) this.store.data.shields.cookies = this.store.data.blockThirdPartyCookies !== false;
-    this.store.data.newTab = { ...DEFAULTS.newTab, ...(isObj(this.store.data.newTab) ? this.store.data.newTab : {}) };
+    // 0.91 New Tab defaults: profiles that never customized their widgets get the new, calmer
+    // page; customized layouts are kept exactly (see ntp-defaults.js). Runs once per profile.
+    const raw = this._raw();
+    const { NTP_DEFAULTS_VERSION, migrateNewTab } = require('./ntp-defaults');
+    const ntp = migrateNewTab(raw ? raw.newTab : undefined, raw ? raw.ntpDefaultsVersion : NTP_DEFAULTS_VERSION);
+    this.store.data.newTab = { ...DEFAULTS.newTab, ...(isObj(this.store.data.newTab) ? this.store.data.newTab : {}), ...ntp.patch };
     if (!validNewTab({ order: this.store.data.newTab.order })) this.store.data.newTab.order = [...NEWTAB_WIDGETS];
+    if (this.store.data.ntpDefaultsVersion !== NTP_DEFAULTS_VERSION) {
+      this.store.data.ntpDefaultsVersion = NTP_DEFAULTS_VERSION;
+      this.store.save();
+    }
     // 0.90: nested objects get any defaults that older (or partial) files lack.
     for (const key of ['atmosphere', 'sidebar', 'focus']) {
       const cur = this.store.data[key];
@@ -336,12 +345,18 @@ class Settings extends EventEmitter {
     if (!validShortcuts(this.store.data.searchShortcuts)) this.store.data.searchShortcuts = structuredClone(DEFAULT_SEARCH_SHORTCUTS);
   }
 
-  _fileHad(key) {
+  _raw() {
     try {
-      return Object.hasOwn(JSON.parse(require('fs').readFileSync(this.store.file, 'utf8')), key);
+      const v = JSON.parse(require('fs').readFileSync(this.store.file, 'utf8'));
+      return isObj(v) ? v : null;
     } catch {
-      return false;
+      return null;
     }
+  }
+
+  _fileHad(key) {
+    const raw = this._raw();
+    return !!raw && Object.hasOwn(raw, key);
   }
 
   get(key) {

@@ -373,6 +373,18 @@ async function main() {
     await waitFor(async () => (await state()).tabs.length === 1, { label: 'closed opener tab' });
   });
 
+  await check('sign-in style popup (window.open with a size) opens its own window and keeps window.opener', async () => {
+    const page = await visibleTarget((u) => u === site + '/', 'home');
+    await page.click('#popup');
+    page.close();
+    const op = await tabTarget((u) => u.endsWith('/opener'), 'popup window');
+    const txt = await waitFor(() => op.eval(`document.getElementById('r') && document.getElementById('r').textContent !== 'checking' && document.getElementById('r').textContent`), { label: 'popup opener check' });
+    assert(txt === 'has-opener', 'popup keeps window.opener, got ' + txt);
+    assert((await state()).tabs.length === 1, 'a sized popup is a window, not a tab');
+    await op.eval('window.close()').catch(() => {});
+    op.close();
+  });
+
   await check('bookmarks: Ctrl+D, star, bookmarks bar, persistence', async () => {
     await waitFor(async () => (await active()).title === 'Vexa Test Home', { label: 'on home' });
     await chrome.key('d', { ctrl: true });
@@ -546,6 +558,12 @@ async function main() {
     hp.close();
     assert(headers.dnt === '1' && headers['sec-gpc'] === '1', 'DNT/GPC headers');
     assert(!/Electron|vexa\//i.test(headers['user-agent']), 'clean user agent: ' + headers['user-agent']);
+    // 0.91: the low-entropy Client Hints are sent (Electron alone sends none) and match what the
+    // page's JavaScript reports, byte for byte. Catches GREASE drift on Electron upgrades.
+    const jsBrands = await chrome.eval(`navigator.userAgentData.brands.map((b) => '"' + b.brand + '";v="' + b.version + '"').join(', ')`);
+    assert(headers['sec-ch-ua'] === jsBrands, `Sec-CH-UA ${headers['sec-ch-ua']} should equal navigator.userAgentData ${jsBrands}`);
+    assert(!/Google Chrome/.test(headers['sec-ch-ua']), 'no Chrome brand outside Google');
+    assert(headers['sec-ch-ua-mobile'] === '?0' && /^"(Windows|macOS|Linux)"$/.test(headers['sec-ch-ua-platform'] || ''), 'mobile/platform hints: ' + headers['sec-ch-ua-mobile'] + ' ' + headers['sec-ch-ua-platform']);
     // first-party cookie works
     await typeAndGo(site + '/c/first-set');
     await waitFor(async () => (await active()).title === 'First party cookie', { label: 'fp set' });
@@ -682,6 +700,13 @@ async function main() {
     await waitFor(() => ntp.eval(`document.body.classList.contains('ready')`), { label: 'ntp ready' });
     assert(!(await ntp.eval(`document.body.classList.contains('has-wallpaper')`)), 'starts with the default look');
     assert(await ntp.eval(`!document.querySelector('#shields-widget').hidden`), 'Shields stats widget on by default');
+    // 0.91: exploring first — no Spaces / Collections boxes by default (both live in the sidebar).
+    assert(await ntp.eval(`document.querySelector('[data-widget=spaces]').hidden && document.querySelector('[data-widget=collections]').hidden`), 'Spaces and Collections boxes off by default');
+    const chips = await waitFor(() => ntp.eval(`[...document.querySelectorAll('#search-hints .xchip')].map((b) => b.textContent).join('|')`), { label: 'explore chips' });
+    assert(/@yt/.test(chips) && /Command Center/.test(chips), 'explore chips: ' + chips);
+    await ntp.eval(`document.querySelector('#search-hints [data-kw=yt]').click()`);
+    assert((await ntp.eval(`document.querySelector('#q').value`)) === '@yt ', 'a chip puts its keyword in the search box');
+    await ntp.eval(`document.querySelector('#q').value = ''`);
     await ntp.eval(`vexa.call('wallpaper.choose', 'gallery', 'dusk')`);
     await waitFor(() => ntp.eval(`document.body.classList.contains('has-wallpaper') && document.querySelector('.bg-img').style.backgroundImage.includes('dusk.svg')`), { label: 'dusk shown live' });
     assert(await ntp.eval(`document.body.classList.contains('wp-dark')`), 'dark wallpaper → light text');
@@ -877,6 +902,10 @@ async function main() {
     await waitFor(() => sp.eval(`document.querySelector('#pw-list').children.length > 0 && document.querySelector('#sync-card').children.length > 0 && document.querySelector('#ext-list').children.length > 0`), { label: 'new sections' });
     const drm = await sp.eval(`document.querySelector('#drm-note').textContent`);
     assert(/Widevine/.test(drm), 'DRM status line present: ' + drm);
+    // 0.91: advanced sections are grouped after the everyday ones.
+    const order = await sp.eval(`[...document.querySelectorAll('main > section')].map((x) => x.id).join()`);
+    assert(order.indexOf('downloads') < order.indexOf('extensions') && order.indexOf('extensions') < order.indexOf('compatibility'), 'section order: ' + order);
+    assert(await sp.eval(`!!document.querySelector('#jump .jump-group') && document.querySelector('#permissions #google-key') !== null`), 'Advanced group in the jump bar; location key kept');
     screenshot('15-settings-new');
     sp.close();
   });

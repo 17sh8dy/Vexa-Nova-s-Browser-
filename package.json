@@ -1,7 +1,7 @@
 {
   "name": "vexa",
   "productName": "Vexa",
-  "version": "0.90.0",
+  "version": "0.91.0",
   "description": "Vexa — the Nova web browser. A fast, private, Chromium-based desktop browser.",
   "main": "src/main/main.js",
   "author": "Nova",

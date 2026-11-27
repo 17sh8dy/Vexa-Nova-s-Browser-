@@ -3,7 +3,7 @@ const path = require('path');
 const { WebContentsView, dialog } = require('electron');
 const { history } = require('./history');
 const { bookmarks } = require('./bookmarks');
-const { isInternal, NEWTAB_URL } = require('./url');
+const { isInternal, NEWTAB_URL, popupTitle } = require('./url');
 const { actionFor } = require('./shortcuts');
 const { settings } = require('./settings');
 const { passwords } = require('./passwords');
@@ -303,6 +303,27 @@ class Tab {
     });
 
     wc.setWindowOpenHandler((details) => this._windowOpen(details));
+    wc.on('did-create-window', (popup) => Tab.labelPopup(popup));
+  }
+
+  /**
+   * Sign-in popups (window.open with a size) have no address bar, so their title always starts
+   * with the real host — "accounts.google.com — Sign in" — and a page can't hide where it is.
+   */
+  static labelPopup(popup) {
+    if (!popup || typeof popup.setTitle !== 'function' || !popup.webContents) return;
+    const pwc = popup.webContents;
+    const update = (title) => {
+      if (popup.isDestroyed() || pwc.isDestroyed()) return;
+      popup.setTitle(popupTitle(pwc.getURL(), typeof title === 'string' ? title : pwc.getTitle()));
+    };
+    pwc.on('page-title-updated', (e, title) => {
+      e.preventDefault();
+      update(title);
+    });
+    pwc.on('did-navigate', () => update());
+    pwc.on('did-navigate-in-page', () => update());
+    update();
   }
 
   _windowOpen({ url, disposition, features }) {

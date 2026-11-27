@@ -45,6 +45,7 @@ function handler(req, res) {
         <a id="p2" href="/page2">Go to page 2</a> ·
         <a id="blank" href="/opener" target="_blank">Open in new tab</a> ·
         <button id="winopen" onclick="window.open('/opener')">window.open</button> ·
+        <button id="popup" onclick="window.open('/opener', 'signin', 'width=480,height=600')">sized popup</button> ·
         <a id="dl" href="/download">Download a file</a>`));
     case '/page2':
       return send(200, 'text/html', page('Second Page', '<h1>Page two</h1><a id="home" href="/">Back home</a>'));

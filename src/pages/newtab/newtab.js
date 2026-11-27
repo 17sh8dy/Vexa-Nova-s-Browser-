@@ -620,8 +620,36 @@
     document.body.dataset.effect = look.effect === 'none' ? 'none' : reduce ? 'static-' + look.effect : look.effect;
   }
 
-  // Search hints: keyword shortcuts and the Command Center.
-  $('#search-hints').innerHTML = isPrivate ? '' : `<span>Try <kbd>@yt</kbd> <kbd>@w</kbd> <kbd>@nova</kbd> <kbd>@tabs</kbd> or press <kbd>${navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl'}+Space</kbd> for the Command Center</span>`;
+  // Explore chips under the search box (0.91): the user's own keyword shortcuts, one click away,
+  // plus the Command Center. Only shortcuts that exist in Settings → Search are offered.
+  const CHIP_KEYS = [['yt', 'YouTube'], ['w', 'Wikipedia'], ['nova', 'Nova sites'], ['gh', 'GitHub']];
+  const MAX_KEYWORD_CHIPS = 3; // keep the row to one line on a normal window
+  const KEY_LABEL = { 'ctrl+space': 'Ctrl+Space', 'ctrl+shift+space': 'Ctrl+Shift+Space', 'ctrl+shift+k': 'Ctrl+Shift+K' };
+  async function renderChips() {
+    const box = $('#search-hints');
+    if (isPrivate) {
+      box.innerHTML = '';
+      return;
+    }
+    const s = await call('settings.get');
+    const have = new Set((s.searchShortcuts || []).map((x) => x.key));
+    const chips = CHIP_KEYS.filter(([k]) => have.has(k)).slice(0, MAX_KEYWORD_CHIPS).map(([k, label]) => `<button type="button" class="xchip" data-kw="${esc(k)}" title="Search ${esc(label)}: type after @${esc(k)}"><code>@${esc(k)}</code>${esc(label)}</button>`);
+    chips.push(`<button type="button" class="xchip" data-cc="@tabs " title="Find one of your open tabs"><code>@tabs</code>Your tabs</button>`);
+    const key = KEY_LABEL[s.commandCenterKey];
+    chips.push(`<button type="button" class="xchip" data-cc=" " title="Tabs, Spaces, bookmarks, history and actions in one box">Command Center${key ? ` <kbd>${esc(navigator.userAgent.includes('Mac') ? key.replace('Ctrl', '⌘') : key)}</kbd>` : ''}</button>`);
+    box.innerHTML = chips.join('');
+  }
+  $('#search-hints').addEventListener('click', (e) => {
+    const b = e.target.closest('.xchip');
+    if (!b) return;
+    if (b.dataset.cc) return call('nav.commandCenter', b.dataset.cc.trimStart());
+    const q = $('#q');
+    q.value = `@${b.dataset.kw} `;
+    q.focus();
+    q.setSelectionRange(q.value.length, q.value.length);
+  });
+  renderChips();
+  window.V.on('settings', (p) => p && (p.key === 'searchShortcuts' || p.key === 'commandCenterKey') && renderChips());
 
   // Hooks for customize.js (Atmosphere, Sounds and Layout tabs of the drawer).
   window.NTP = { get data() { return data; }, load: () => load({ keepShown: true }), openDrawer: () => openDrawer(), renderWidgets: () => renderWidgets() };

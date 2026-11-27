@@ -3,10 +3,10 @@
 Vexa is Nova's desktop web browser: a real Chromium-engine browser with its own
 interface, privacy defaults and violet Nova identity.
 
-> Status: **0.90.0 — the Experience Update.** Adds Vexa Atmosphere (themes, effects, interface
-> sounds), Spaces, the Command Center, Focus (reader, focus sessions, research panel), Collections and
-> a widget New Tab page on top of the complete 0.6 browser. Release notes:
-> [docs/RELEASE-NOTES-0.90.0.md](docs/RELEASE-NOTES-0.90.0.md). See [Known limitations](#known-limitations).
+> Status: **0.91.0** — Google sign-in investigation and compatibility fixes, simpler Settings, and a
+> New Tab page made for exploring. Release notes: [docs/RELEASE-NOTES-0.91.0.md](docs/RELEASE-NOTES-0.91.0.md)
+> (0.90, the Experience Update: [docs/RELEASE-NOTES-0.90.0.md](docs/RELEASE-NOTES-0.90.0.md)).
+> See [Known limitations](#known-limitations).
 
 ---
 
@@ -41,7 +41,7 @@ npm start          # launches Vexa
 npm run dist:win
 ```
 
-Produces `dist\Vexa-Setup-0.90.0.exe` (installer) and `dist\Vexa-Portable-0.90.0.exe`.
+Produces `dist\Vexa-Setup-0.91.0.exe` (installer) and `dist\Vexa-Portable-0.91.0.exe`.
 The exe isn't code-signed, so Windows SmartScreen will warn ("More info → Run anyway").
 
 ---
@@ -77,7 +77,7 @@ The exe isn't code-signed, so Windows SmartScreen will warn ("More info → Run 
 | **Search** (0.90) | Keyword shortcuts (`@g`, `@yt`, `@w`, `@gh`, `@mdn`, `@vexa`, `@nova` = Nova's sites via Vexa Search's new `in:nova` filter, plus your own) and scope filters (`@tabs`, `@bookmarks`, `@history`, `@collections`, `@spaces`); "Switch to tab"; recent searches (local, never synced, off in private windows, cleared with history); word completions from the offline Vexa Search index |
 | **Focus** (0.90) | Reader view (`F9`, extracted in an isolated world and rebuilt element by element on `vexa://reader`, which may only call `reader.*`); per-site "always Reader"; minimal interface (`Ctrl+Shift+F`); focus sessions with their own Space, timer, muted other tabs and a "Stay focused" panel for sites on your distraction list (allow for 5 minutes); research panel (a collection beside the page with notes and *Clip selection*) |
 | **Collections** (0.90) | `vexa://collections`: links, articles, images, videos, notes, files and screenshots with names, descriptions, covers, favorites, search, drag-and-drop reordering and dropping files / links onto the page, move between collections, JSON export / import (files embedded). Save from the address-bar button, `Ctrl+Shift+S`, the right-click menu or the Command Center. Text syncs; files stay per device; executables are only revealed in their folder, never launched |
-| **New Tab layouts** (0.90) | Centered or Dashboard; reorderable widgets: search, favorites (your own tiles, drag to reorder), most visited, recently visited, collections, Spaces, weather (opt-in, open-meteo.com) |
+| **New Tab layouts** (0.90, 0.91) | Centered or Dashboard; reorderable widgets: search, favorites (your own tiles, drag to reorder), most visited, recently visited, collections and Spaces (off by default since 0.91 — both are in the sidebar), weather (opt-in, open-meteo.com). Explore chips under the search box insert your keyword shortcuts or open the Command Center |
 | **Clear data time range** | Last hour / 24 hours / 7 days / 4 weeks / all time for history and the download list (see limitations for cookies and cache) |
 
 ### Keyboard shortcuts
@@ -205,7 +205,7 @@ npm test            # unit tests (address-bar resolution etc.)
 npm run test:e2e    # launches the real app against a local test site and drives it
 ```
 
-The end-to-end suite (49 checks; 7 of them new in 0.90 for the Command Center, Spaces incl. isolated cookies,
+The end-to-end suite (50 checks; 1 new in 0.91 for sign-in popups; 7 new in 0.90 for the Command Center, Spaces incl. isolated cookies,
 address-bar keywords and search history, Atmosphere looks + sounds + imported audio, New Tab layouts, Collections + Reader
 sandboxing, and Focus sessions) covers navigation, search, error handling, tabs, popups,
 bookmarks, suggestions, find, zoom, downloads, menus, history, settings, permission prompts,
@@ -248,7 +248,7 @@ Things that were limitations in 0.1.0 and are now handled are described under *W
 What remains, honestly:
 
 * **DRM** is opt-in and untested (see above). Vexa makes no claim of Netflix compatibility.
-* **Google sign-in:** the user agent never carries `Electron/` or `vexa/`. On Google's own hosts only, and only while *Settings → Compatibility → Present the Chrome brand to Google* is on (default), the Client Hints and `navigator.userAgentData` add the "Google Chrome" brand — a documented compatibility claim, with its consequences explained in docs/COMPATIBILITY.md. "Sign in with Google" buttons on other sites keep their `accounts.google.com/gsi` cookies despite cross-site cookie blocking (switchable). Google decides on its own signals and can change them at any time — **not verified against a live Google login**. There is no "sign in via the system browser" handoff, because that would sign the *other* browser in, not Vexa.
+* **Google sign-in — unsupported until verified.** 0.90 testers were refused (*"This browser or app may not be secure"*). 0.91 fixes what Vexa itself did wrong: it now sends the standard Client Hints with Chromium's honest values (Electron sends none), the optional Chrome-brand mode (*Settings → Compatibility*, on by default, Google's hosts only) adds "Google Chrome" to Chromium's real brand list instead of a hand-written one, and fingerprinting protection no longer alters Google's sign-in pages. A real sign-in has **not** been tested on 0.91 — see [docs/GOOGLE-SIGNIN-TESTING.md](docs/GOOGLE-SIGNIN-TESTING.md). Google may still refuse Vexa for reasons Electron can't honestly change (`window.chrome` is empty); that's documented in docs/COMPATIBILITY.md rather than worked around. "Sign in with Google" buttons on other sites keep their `accounts.google.com/gsi` cookies despite cross-site cookie blocking (switchable). There is no "sign in via the system browser" handoff, because that would sign the *other* browser in, not Vexa.
 * **Atmosphere:** imported sounds and the sound/visual settings sync, but the imported sound *files* stay on the device where you imported them (other devices fall back to the profile sound). "Notification" sounds cover Vexa's own notices (downloads finished, permission prompts, focus timer) — Vexa can't hear a website's Web Notifications. The title-bar window-control area on Windows stays a solid color even when a background effect or wallpaper is on. Interface sounds and effects have been exercised by automated tests; how they *sound* and *look* still needs a human's judgement.
 * **Spaces:** extensions run only in the default session, so isolated Spaces don't get unpacked extensions. Tabs can't be dragged between Spaces with the mouse (use the tab menu); dragging tabs between windows keeps each tab's Space. Private windows have no Spaces.
 * **Command Center:** phrase understanding is a fixed set of rules, not AI; anything else falls back to fuzzy matching and web search. `Ctrl+Space` is taken before web pages see it — code editors in the browser that use it need another Command Center key (Settings → General).
@@ -297,4 +297,5 @@ building it:
   and update NovaLegal (Vexa Terms "Your data stays on your computer" says *no update check*, plus the
   Vexa entry in `data/products.js`) **before** release.
 
-  TODO: Build a setting (Developer Mode) or something of like to that name, it should add a FPS Counter, show how much Memory the tab is taking when they hover over it. OFF By Defualt.
+  TODO: Build a setting (Developer Mode) or something of like to that name, it should add a FPS Counter, show how much Memory the tab is taking when they hover over it. OFF By Defualt. 
+  Make the page alot simpilar, dont downgrade the backend but like LET THEM EXPLORE, not everything has to be on the new tab page. Add Auto Updates like my other apps.
