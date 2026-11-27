@@ -186,3 +186,8 @@ test('settings.init applies the New Tab migration once and keeps customized layo
   assert.strictEqual(s.newTab.collections, true);
   assert.strictEqual(s.newTab.spaces, true);
 });
+
+test('Google\'s "Couldn\'t sign you in" page is recognised narrowly (for the Vexa notice)', () => {
+  for (const u of ['https://accounts.google.com/v3/signin/rejected?continue=x', 'https://accounts.google.com/signin/v2/rejected', 'https://accounts.google.com/signin/rejected', 'https://accounts.google.co.uk/v3/signin/rejected']) assert.ok(url.isGoogleSignInRejected(u), u);
+  for (const u of ['https://accounts.google.com/v3/signin/identifier', 'https://accounts.google.com/', 'http://accounts.google.com/v3/signin/rejected', 'https://evil.example/v3/signin/rejected', 'https://accounts.google.com.evil.net/v3/signin/rejected', 'https://accounts.google.com/v3/signin/rejected-not', 'nonsense']) assert.ok(!url.isGoogleSignInRejected(u), u);
+});

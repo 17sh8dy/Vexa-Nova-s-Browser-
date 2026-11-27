@@ -152,6 +152,20 @@ function withChromeBrandHeader(value) {
   return brandHeader(next);
 }
 
+/**
+ * Google's "Couldn't sign you in — This browser or app may not be secure" page
+ * (accounts.google.com/v3/signin/rejected, /signin/v2/rejected, /signin/rejected…).
+ * Vexa shows a short explanation above it; nothing on the page is touched.
+ */
+function isGoogleSignInRejected(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && isGoogleAccountsHost(u.hostname) && /\/signin(\/[a-z0-9]+)*\/rejected\/?$/i.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
 /** Title for a popup window: the page's host first (it can't be faked by the page), then its title. */
 function popupTitle(url, title) {
   let host = '';
@@ -326,6 +340,7 @@ module.exports = {
   lowEntropyClientHints,
   sendsClientHints,
   popupTitle,
+  isGoogleSignInRejected,
   parseKeyword,
   fillTemplate,
   resolveInput,

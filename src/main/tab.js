@@ -3,7 +3,7 @@ const path = require('path');
 const { WebContentsView, dialog } = require('electron');
 const { history } = require('./history');
 const { bookmarks } = require('./bookmarks');
-const { isInternal, NEWTAB_URL, popupTitle } = require('./url');
+const { isInternal, NEWTAB_URL, popupTitle, isGoogleSignInRejected } = require('./url');
 const { actionFor } = require('./shortcuts');
 const { settings } = require('./settings');
 const { passwords } = require('./passwords');
@@ -58,6 +58,7 @@ class Tab {
     this.zoom = 1;
     this.permissionRequests = []; // pending prompts
     this.passwordPrompt = null; // { id, origin, username, password, update, navs }
+    this.googleNotice = false; // on Google's "Couldn't sign you in" page (see isGoogleSignInRejected)
     this.find = { active: false, text: '', matches: 0, ordinal: 0 };
     this.htmlFullscreen = false;
     this.lastGesture = 0; // when the user last clicked / typed in this tab (popup blocking)
@@ -176,6 +177,7 @@ class Tab {
       // A "save password?" offer survives the post-login redirect, but not wandering around.
       if (this.passwordPrompt && ++this.passwordPrompt.navs > 2) this.passwordPrompt = null;
       this.url = url;
+      this.googleNotice = isGoogleSignInRejected(url);
       // Restored and back/forward-cached entries already carry a title, and Chromium
       // won't fire page-title-updated for them — so take it from the entry.
       this.title = this._entryTitle(url);
@@ -187,6 +189,9 @@ class Tab {
     wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
       if (!isMainFrame) return;
       this.url = url;
+      if (!isGoogleSignInRejected(url)) this.googleNotice = false;
+      else if (this.googleNoticeUrl !== url) this.googleNotice = true;
+      this.googleNoticeUrl = url;
       if (!this.isPrivate) history.addVisit(url, wc.getTitle(), this.favicon);
       this.changed();
     });
@@ -498,6 +503,7 @@ class Tab {
       passwordPrompt: this.passwordPrompt
         ? { id: this.passwordPrompt.id, origin: this.passwordPrompt.origin, username: this.passwordPrompt.username, update: this.passwordPrompt.update }
         : null,
+      googleNotice: !!this.googleNotice,
       find: this.find,
       pending: !!this.pending
     };

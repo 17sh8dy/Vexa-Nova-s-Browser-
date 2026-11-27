@@ -642,6 +642,20 @@
     cmd('password-decision', { tabId: t.id, decision: b.dataset.decision });
   });
 
+  // ------------------------------------------------------------------ Google "Couldn't sign you in" notice
+  const googleBar = $('#google-bar');
+  googleBar.querySelector('.infobar-icon').innerHTML = I.shield;
+  function renderGoogleNotice(t) {
+    googleBar.hidden = !(t && t.googleNotice);
+  }
+  googleBar.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]');
+    const t = activeTab();
+    if (!b || !t) return;
+    if (b.dataset.act === 'learn') cmd('navigate', { input: 'vexa://settings/#compatibility', disposition: 'new-tab' });
+    cmd('google-notice-dismiss', { tabId: t.id });
+  });
+
   // ------------------------------------------------------------------ find bar
   const findbar = $('#findbar');
   const findInput = $('#find-input');
@@ -888,6 +902,7 @@
     renderBookmarksBar();
     renderPermission(t);
     renderPasswordPrompt(t);
+    renderGoogleNotice(t);
     renderFind(t);
     renderPanel(t);
     renderDownloads();

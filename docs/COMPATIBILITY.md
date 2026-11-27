@@ -127,6 +127,38 @@ problems, all of the "browser looks tampered with" kind that the help page above
 * On sites that offer it, use another sign-in method (Microsoft, Apple, email + password).
 * Use Google's own apps (Gmail, Drive) or another browser for Google itself.
 
+### What Vexa shows when Google refuses
+
+When Google's rejection page loads (`accounts.google.com/…/signin/rejected`, see
+`isGoogleSignInRejected()` in `url.js`), Vexa shows a one-line bar above it: *Google doesn't allow
+sign-in from Vexa. Your account and password are fine — Google blocks browsers it doesn't
+recognise.* with **Learn more** (Settings → Compatibility) and **Got it**. The page itself is not
+touched. The exact rejection URL is Google's and may change; if the bar stops appearing, check the
+address shown on the refusal page against that function.
+
+### Why this matters — and the long-term option (not started)
+
+Not being able to sign in to Google is a real downgrade: billions of people use Gmail, YouTube,
+Drive and "Sign in with Google", and anyone who tries Vexa will expect it to work. It isn't a
+setting Vexa can fix, though. It comes from what Vexa is built on:
+
+* **Brave, Edge, Vivaldi and Opera are full builds of Chromium.** They compile Chrome's whole
+  browser layer (the `chrome.*` APIs, extensions, Safe Browsing, the component updater…) and add
+  their own features on top, so Google's checks see a complete browser. Each also reports its own
+  name honestly.
+* **Electron is only Chromium's rendering engine**, made to be embedded in apps. Since 2019 Google
+  blocks sign-in from embedded engines, because the app around them controls the page and could
+  read the password and 2-Step code — Google can't tell an honest browser built on Electron from a
+  phishing app built on Electron.
+
+**The only reliable fix is to build Vexa on full Chromium**, the way Brave and Edge do: maintain a
+fork of the Chromium source, port Vexa's interface and features onto it, build it (hours per build
+on a large machine) and follow Chromium's releases every four weeks. That is a large project and is
+**not started**; it's recorded here as the path to take if Google sign-in becomes a requirement.
+Things that are *not* options: disguising Vexa as another browser (unreliable, against this
+project's rules, and it can get users' accounts flagged), CEF (also an embedded engine, also
+blocked), or signing in through another browser (that signs the *other* browser in).
+
 ### Why there is no "sign in through the system browser" handoff
 
 The RFC 8252 pattern (open the system browser, then return to the app through a redirect) lets a

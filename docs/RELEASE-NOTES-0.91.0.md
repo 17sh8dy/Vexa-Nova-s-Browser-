@@ -28,7 +28,12 @@ itself was making the browser look tampered with. 0.91 fixes those parts:
 consistent and honest, but they are not enough for Google, which can refuse browsers it doesn't
 recognise for reasons Electron can't honestly change (for example, `window.chrome` is empty).
 **Google sign-in is a known limitation of Vexa** — see
-[COMPATIBILITY.md](COMPATIBILITY.md#if-google-still-refuses-vexa) for what still works.
+[COMPATIBILITY.md](COMPATIBILITY.md#if-google-still-refuses-vexa) for what still works, and for the
+long-term option (building Vexa on full Chromium, like Brave and Edge — not started).
+
+* **A short notice when Google refuses:** on Google's "Couldn't sign you in" page, a one-line bar
+  explains that the account and password are fine and that Google blocks browsers it doesn't
+  recognise, with *Learn more* and *Got it*.
 
 | Date | Account type | Chrome brand | Result |
 |---|---|---|---|

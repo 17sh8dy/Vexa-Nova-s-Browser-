@@ -1340,6 +1340,12 @@ class VexaWindow extends EventEmitter {
         return this.moveTabToWindow(args.tabId, [...require('./app-controller').windows].find((x) => x.id === args.windowId));
       case 'tab-drop':
         return this.dropTab(args.tabId, { out: !!args.out });
+      case 'google-notice-dismiss':
+        if (tab) {
+          tab.googleNotice = false;
+          tab.changed();
+        }
+        return;
       case 'password-decision':
         return tab && tab.resolvePasswordPrompt(args.decision === 'save' ? 'save' : args.decision === 'never' ? 'never' : 'dismiss');
       case 'move-tab':
