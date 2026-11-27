@@ -620,8 +620,29 @@
     document.body.dataset.effect = look.effect === 'none' ? 'none' : reduce ? 'static-' + look.effect : look.effect;
   }
 
-  // Search hints: keyword shortcuts and the Command Center.
-  $('#search-hints').innerHTML = isPrivate ? '' : `<span>Try <kbd>@yt</kbd> <kbd>@w</kbd> <kbd>@nova</kbd> <kbd>@tabs</kbd> or press <kbd>${navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl'}+Space</kbd> for the Command Center</span>`;
+  // Two chips under the search box (0.91): find an open tab, or open the Command Center.
+  // No site shortcuts here: Vexa doesn't point new users at particular sites.
+  const KEY_LABEL = { 'ctrl+space': 'Ctrl+Space', 'ctrl+shift+space': 'Ctrl+Shift+Space', 'ctrl+shift+k': 'Ctrl+Shift+K' };
+  async function renderChips() {
+    const box = $('#search-hints');
+    if (isPrivate) {
+      box.innerHTML = '';
+      return;
+    }
+    const s = await call('settings.get');
+    const chips = [];
+    chips.push(`<button type="button" class="xchip" data-cc="@tabs " title="Find one of your open tabs"><code>@tabs</code>Your tabs</button>`);
+    const key = KEY_LABEL[s.commandCenterKey];
+    chips.push(`<button type="button" class="xchip" data-cc=" " title="Tabs, Spaces, bookmarks, history and actions in one box">Command Center${key ? ` <kbd>${esc(navigator.userAgent.includes('Mac') ? key.replace('Ctrl', '⌘') : key)}</kbd>` : ''}</button>`);
+    box.innerHTML = chips.join('');
+  }
+  $('#search-hints').addEventListener('click', (e) => {
+    const b = e.target.closest('.xchip');
+    if (!b) return;
+    if (b.dataset.cc) call('nav.commandCenter', b.dataset.cc.trimStart());
+  });
+  renderChips();
+  window.V.on('settings', (p) => p && p.key === 'commandCenterKey' && renderChips());
 
   // Hooks for customize.js (Atmosphere, Sounds and Layout tabs of the drawer).
   window.NTP = { get data() { return data; }, load: () => load({ keepShown: true }), openDrawer: () => openDrawer(), renderWidgets: () => renderWidgets() };

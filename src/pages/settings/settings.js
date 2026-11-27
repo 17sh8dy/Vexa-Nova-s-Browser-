@@ -54,14 +54,14 @@
 
   // ------------------------------------------------------------------ Vexa Shields
   const SHIELDS = [
-    ['ads', 'Block third-party ads', 'Stops ad networks loading on the sites you visit. Ads a site serves itself are not affected.', I.target],
-    ['trackers', 'Block trackers', 'Stops analytics and tracking services that follow you from site to site.', I.target],
-    ['cookies', 'Block cross-site cookies', 'Other sites embedded in a page can\'t read or set cookies. Some embedded sign-ins may stop working.', I.cookie],
-    ['fingerprinting', 'Fingerprinting protection', 'Gives sites slightly different canvas, graphics and audio readings in every session, so they can\'t be used to recognise you.', I.fingerprint],
-    ['https', 'Upgrade connections to HTTPS', 'Tries the secure version of a site first and falls back to http:// only when there isn\'t one.', I.lockUp],
-    ['malicious', 'Dangerous-site protection', 'Warns you before opening a site on Vexa\'s built-in list of phishing and scam sites.', I.danger.replace('width="18" height="18"', 'width="16" height="16"')],
-    ['params', 'Remove tracking parameters', 'Strips click-tracking codes such as utm_source and fbclid from the links you open.', I.popup],
-    ['popups', 'Block intrusive popups', 'Windows a site tries to open without you clicking are blocked.', I.popup]
+    ['ads', 'Block third-party ads', 'Ad networks embedded in pages. A site\'s own ads aren\'t affected.', I.target],
+    ['trackers', 'Block trackers', 'Analytics and tracking services that follow you from site to site.', I.target],
+    ['cookies', 'Block cross-site cookies', 'Sites embedded in a page can\'t read or set cookies. Some embedded sign-ins may stop working.', I.cookie],
+    ['fingerprinting', 'Fingerprinting protection', 'Slightly varies canvas, graphics and audio readings each session so sites can\'t recognise you by them. Skipped on Google\'s sign-in pages, which refuse altered readings.', I.fingerprint],
+    ['https', 'Upgrade connections to HTTPS', 'Uses the secure version of a site whenever there is one.', I.lockUp],
+    ['malicious', 'Dangerous-site protection', 'Warns you before opening a known phishing or scam site.', I.danger.replace('width="18" height="18"', 'width="16" height="16"')],
+    ['params', 'Remove tracking parameters', 'Removes tracking codes such as utm_source and fbclid from links you open.', I.popup],
+    ['popups', 'Block intrusive popups', 'Blocks windows a site opens without you clicking.', I.popup]
   ];
   const SHIELD_NAMES = Object.fromEntries(SHIELDS.map(([k, n]) => [k, n]));
 
@@ -465,7 +465,7 @@
   // ---- protected video (DRM)
   async function loadDrm() {
     const d = await call('drm.status');
-    $('#drm-note').textContent = d.supported ? 'Protected video (Widevine): available in this build.' : 'Protected video (Widevine): not in this build — see the README to enable it.';
+    $('#drm-note').textContent = d.supported ? 'Protected video (Widevine): available' : 'Protected video (Widevine): not in this build';
   }
 
   // ================================================================== 0.90
@@ -646,8 +646,8 @@
   async function loadCompat() {
     const c = await call('app.compat');
     $('#compat-drm').textContent = c.widevine.build
-      ? `This is a Widevine-enabled build (castlabs Electron). CDM status: ${JSON.stringify(c.widevine.status)}. Netflix and similar services additionally need the packaged app to be VMP-signed.`
-      : `Not in this build. Stock Electron ${c.electron} ships without the Widevine CDM, so DRM-protected video (Netflix, Disney+, Prime Video, Spotify web) won't play. Developers can build with castlabs' Widevine-enabled Electron: npm run use-widevine (see docs/COMPATIBILITY.md).`;
+      ? `Available (Widevine-enabled build). Netflix and similar services also need the app to be VMP-signed. Component status: ${JSON.stringify(c.widevine.status)}`
+      : `Not in this build, so DRM-protected video (Netflix, Disney+, Prime Video, Spotify) won't play. Developers: npm run use-widevine (see docs/COMPATIBILITY.md).`;
   }
 
   // ---- section highlighting / hash jumps

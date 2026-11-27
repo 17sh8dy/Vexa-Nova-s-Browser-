@@ -12,7 +12,7 @@ const { history } = require('./history');
 const { bookmarks } = require('./bookmarks');
 const { downloads } = require('./downloads');
 const { clearBrowsingData } = require('./sessions');
-const { SEARCH_ENGINES, resolveInput, originOf } = require('./url');
+const { SEARCH_ENGINES, resolveInput, originOf, hostOf, isGoogleHost } = require('./url');
 const { passwords } = require('./passwords');
 const { autofill, FIELDS: AUTOFILL_FIELDS } = require('./autofill');
 const { extensions } = require('./extensions');
@@ -433,7 +433,9 @@ function register() {
     try {
       const frameUrl = event.senderFrame?.url || '';
       const base = event.senderFrame === event.sender.mainFrame ? shields.pageConfig(event.sender.session, frameUrl) : { fingerprinting: false };
-      event.returnValue = { ...base, googleCompat: !!settings.get('googleCompat') };
+      // The Chrome-brand compatibility mode applies to exactly the hosts whose request headers
+      // get it (sessions.js), so navigator.userAgentData and Sec-CH-UA always agree.
+      event.returnValue = { ...base, googleCompat: !!settings.get('googleCompat') && /^https:/i.test(frameUrl) && isGoogleHost(hostOf(frameUrl)) };
     } catch {
       event.returnValue = { fingerprinting: false, googleCompat: false };
     }

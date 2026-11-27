@@ -78,3 +78,26 @@ a.btn:hover { text-decoration: none; }
 .row.col { flex-direction: column; align-items: stretch; }
 #focus-blocklist { width: 100%; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: 12.5px ui-monospace, Consolas, monospace; padding: 8px 10px; resize: vertical; }
 .grow { flex: 1; }
+
+/* 0.91: everyday sections first, then an "Advanced" group */
+.jump-sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--border-strong); }
+.jump-group { align-self: center; padding: 0 4px 0 2px; font-size: 10.5px; font-weight: 750; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-faint); }
+.pill.adv { vertical-align: middle; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-faint); }
+.key-input { width: 280px; max-width: 100%; }
+.hint b { color: var(--text); font-weight: 600; }
+
+/* 0.91: narrow windows — controls drop under their label instead of squeezing it */
+@media (max-width: 700px) {
+  /* Switches stay beside their label; wide controls (menus, fields, button groups) go below it. */
+  .row:has(> select, > input, > .seg, > .btn) { flex-wrap: wrap; }
+  .row:has(> select, > input, > .seg, > .btn) .label { flex-basis: 100%; }
+  .row > input[type="url"], .row > input[type="password"], .row > select { width: 100% !important; max-width: 100%; }
+  .checks, .form-grid { grid-template-columns: 1fr; }
+  .clear-actions { flex-wrap: wrap; justify-content: flex-start; }
+  .space-row, .sc-row { flex-wrap: wrap; }
+  .sc-name, .sc-url { flex: 1 1 100%; width: auto; }
+  .list-row { flex-wrap: wrap; }
+  .about { flex-direction: column; align-items: flex-start; }
+}
+.about > div { min-width: 0; }
+.about-meta { overflow-wrap: anywhere; }

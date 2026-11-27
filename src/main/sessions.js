@@ -43,10 +43,32 @@ function cleanUserAgent() {
 }
 
 // Google sign-in compatibility (docs/COMPATIBILITY.md). Optional Chrome brand in Client
-// Hints on Google's own hosts — see isGoogleHost / googleBrandHeaders in url.js.
-const { isGoogleHost, isGoogleSignInUrl, googleBrandHeaders: brandHeaders } = require('./url');
-const googleBrandHeaders = () => brandHeaders(process.versions.chrome);
-const GOOGLE_HOST = { test: (h) => isGoogleHost(h) };
+// Hints on Google's own hosts — see isGoogleHost / withChromeBrandHeader in url.js.
+const { isGoogleHost, isGoogleSignInUrl, withChromeBrandHeader, lowEntropyClientHints, sendsClientHints } = require('./url');
+
+// Chromium's own low-entropy Client Hints (see lowEntropyClientHints in url.js). Computed once.
+let clientHints = null;
+const CLIENT_HINT_KEYS = ['sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform'];
+function addClientHints(headers) {
+  if (!clientHints) clientHints = lowEntropyClientHints(process.versions.chrome, process.platform);
+  const have = new Set(Object.keys(headers).map((k) => k.toLowerCase()));
+  for (const k of CLIENT_HINT_KEYS) if (!have.has(k) && clientHints[k]) headers[k] = clientHints[k];
+  return headers;
+}
+
+/**
+ * Chrome compatibility mode on Google's hosts: add "Google Chrome" to the brand headers already
+ * on this request (Chromium's, or the standard ones addClientHints() put there). Headers that
+ * aren't on it (for example the high-entropy full version list, which a site has to ask for)
+ * are never added, and the GREASE brand and order stay Chromium's own, so the result stays
+ * consistent with what navigator.userAgentData reports. Mutates and returns `headers`.
+ */
+function applyChromeBrand(headers) {
+  for (const k of Object.keys(headers)) {
+    if (/^sec-ch-ua(-full-version-list)?$/i.test(k)) headers[k] = withChromeBrandHeader(headers[k]);
+  }
+  return headers;
+}
 
 // "Sign in with Google" buttons (Google Identity Services) on other sites run in an
 // accounts.google.com iframe that needs the user's Google cookies to show who is signed in.
@@ -153,11 +175,11 @@ function configureWebRequest(ses) {
       delete headers.Cookie;
       delete headers.cookie;
     }
+    // Standard low-entropy Client Hints with Chromium's honest values, on secure requests only.
+    // Headers Chromium already sent are left alone.
+    if (sendsClientHints(details.url)) addClientHints(headers);
     // Opt-out compatibility mode (Settings → Compatibility): Chrome brand in Client Hints on Google's hosts.
-    if (settings.get('googleCompat') && GOOGLE_HOST.test(hostOf(details.url))) {
-      for (const k of Object.keys(headers)) if (/^sec-ch-ua(-full-version-list)?$/i.test(k)) delete headers[k];
-      Object.assign(headers, googleBrandHeaders());
-    }
+    if (settings.get('googleCompat') && isGoogleHost(hostOf(details.url))) applyChromeBrand(headers);
     callback({ requestHeaders: headers });
   });
 
@@ -303,4 +325,4 @@ async function clearBrowsingData(what, { since = 0 } = {}) {
   return true;
 }
 
-module.exports = { configureSession, defaultSession, newPrivateSession, clearBrowsingData, setPermissionPrompter, cleanUserAgent };
+module.exports = { configureSession, defaultSession, newPrivateSession, clearBrowsingData, setPermissionPrompter, cleanUserAgent, applyChromeBrand };
