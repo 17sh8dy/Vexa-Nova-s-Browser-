@@ -5,6 +5,7 @@
  *
  *   npm run test:e2e            (needs a display; on Linux CI use xvfb-run)
  *   VEXA_E2E_SHOTS=1 npm run test:e2e   also saves screenshots to test/e2e/artifacts
+ *   VEXA_E2E_APP=dist\win-unpacked\Vexa.exe npm run test:e2e   tests a packaged build
  */
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
@@ -119,9 +120,11 @@ async function target(pred, label) {
 // ------------------------------------------------------------------ app lifecycle
 let app = null;
 function launch(profile) {
-  const args = ['.', `--remote-debugging-port=${PORT}`, ...EXTRA_ARGS];
+  // VEXA_E2E_APP=dist/win-unpacked/Vexa.exe runs the suite against a packaged build instead of the sources.
+  const packaged = process.env.VEXA_E2E_APP;
+  const args = [...(packaged ? [] : ['.']), `--remote-debugging-port=${PORT}`, ...EXTRA_ARGS];
   if (process.platform === 'linux' && process.getuid && process.getuid() === 0) args.push('--no-sandbox');
-  app = spawn(ELECTRON, args, { cwd: ROOT, env: { ...process.env, VEXA_PROFILE: profile }, stdio: ['ignore', 'pipe', 'pipe'] });
+  app = spawn(packaged || ELECTRON, args, { cwd: ROOT, env: { ...process.env, VEXA_PROFILE: profile }, stdio: ['ignore', 'pipe', 'pipe'] });
   app.stderr.on('data', (d) => {
     const s = String(d);
     if (process.env.VEXA_E2E_VERBOSE && !/dbus|Fontconfig|NODE_OPTION/.test(s)) process.stderr.write(s);
@@ -800,7 +803,9 @@ async function main() {
   await check('clear browsing data from settings', async () => {
     await typeAndGo('vexa://settings/#privacy');
     const sp = await tabTarget((u) => u.startsWith('vexa://settings'), 'settings');
-    await waitFor(() => sp.eval(`!!document.getElementById('clear-now')`), { label: 'settings' });
+    // The button is in the HTML before settings.js attaches its handler: wait until the page has
+    // loaded (the version is filled in by settings.js) so the click isn't lost.
+    await waitFor(() => sp.eval(`!!document.getElementById('clear-now') && !!document.getElementById('ver').textContent`), { label: 'settings' });
     await sp.eval(`document.getElementById('clear-now').click()`);
     await waitFor(() => {
       const h = JSON.parse(fs.readFileSync(path.join(profile, 'history.json'), 'utf8'));
