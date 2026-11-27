@@ -198,9 +198,11 @@ project rules out. A handoff would leave you signed in to the wrong browser, so 
   wrapped canvas / WebGL / audio functions on the sign-in page in both modes. The probe ran through
   the e2e-style remote-debugging connection, so it says nothing about whether Google *accepts* the
   sign-in — only what Vexa now presents.
-* **Real sign-in, by hand (November 27, 2026, 0.91, Chrome brand on and off): refused in both modes** with *"This
-  browser or app may not be secure"*. How the password was entered (typed, or pasted from a
-  password manager) doesn't matter for this message — it is about the browser, not the input.
+* **Real sign-in, by hand (November 27, 2026, installed 0.91, Chrome brand on and off): refused in
+  both modes, at the email step** — Google never shows the password page. The Vexa notice bar
+  appeared on the refusal page as intended. The message is *"This browser or app may not be
+  secure"*; since it comes before the password, how a password is entered (typed, or pasted from
+  a password manager) plays no part — it is about the browser, not the input.
   Re-test with [GOOGLE-SIGNIN-TESTING.md](GOOGLE-SIGNIN-TESTING.md) after Electron upgrades.
 
 ---

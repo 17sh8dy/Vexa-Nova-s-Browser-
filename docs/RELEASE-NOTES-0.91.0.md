@@ -37,8 +37,11 @@ long-term option (building Vexa on full Chromium, like Brave and Edge — not st
 
 | Date | Account type | Chrome brand | Result |
 |---|---|---|---|
-| 2026-11-27 | tester's own accounts | on (default) | Refused: "This browser or app may not be secure" |
-| 2026-11-27 | tester's own accounts | off | Refused: "This browser or app may not be secure" |
+| 2026-11-27 | tester's own accounts | on (default) | Refused at the email step: "This browser or app may not be secure" |
+| 2026-11-27 | tester's own accounts | off | Refused at the email step: "This browser or app may not be secure" |
+
+Google refuses before it even asks for the password, so this is about the browser, not the
+account. The notice bar was checked on the real refusal page with the installed 0.91 build.
 
 ## Settings
 
@@ -61,6 +64,15 @@ label instead of squeezing it.
   defaults once. If you had changed any widget, the order or the arrangement, nothing changes.
   *Reset New Tab to the default look* now resets to the 0.91 defaults.
 * Small windows: the search box, chips and tiles fit without sideways scrolling.
+
+## Release checks (November 27, 2026)
+
+* Packaged build (`dist\win-unpacked\Vexa.exe`): e2e 50/50 (`VEXA_E2E_APP=… npm run test:e2e`).
+* Upgrade from profiles created by the real 0.90 portable build: settings, bookmarks and
+  favorites kept; an uncustomized New Tab gets the new defaults, a customized one is unchanged.
+* Portable 0.91 exe starts and keeps its data.
+* Installer run by hand over an existing 0.90 install: upgrade worked, profile intact.
+* Google refusal notice seen on the real refusal page.
 
 ## Under the hood
 
